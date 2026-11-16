@@ -1,0 +1,34 @@
+services:
+  mysql:
+    image: mysql:8.4.11
+    environment:
+      MYSQL_DATABASE: ${CF_DB_NAME:-commerceflow}
+      MYSQL_USER: ${CF_DB_USER:-commerceflow}
+      MYSQL_PASSWORD: ${CF_DB_PASSWORD:?Run scripts/init-env.ps1 first}
+      MYSQL_ROOT_PASSWORD: ${CF_DB_ROOT_PASSWORD:?Set a distinct root password}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  app:
+    build: .
+    environment:
+      CF_DB_URL: jdbc:mysql://mysql:3306/${CF_DB_NAME:-commerceflow}?connectionTimeZone=UTC
+      CF_DB_USER: ${CF_DB_USER:-commerceflow}
+      CF_DB_PASSWORD: ${CF_DB_PASSWORD:?Set database password}
+      CF_BOOTSTRAP_ADMIN_EMAIL: ${CF_BOOTSTRAP_ADMIN_EMAIL:?Set local bootstrap email}
+      CF_BOOTSTRAP_ADMIN_PASSWORD: ${CF_BOOTSTRAP_ADMIN_PASSWORD:?Set local bootstrap password}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+volumes:
+  mysql-data:
