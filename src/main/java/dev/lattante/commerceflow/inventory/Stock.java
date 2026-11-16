@@ -17,7 +17,7 @@ public record Stock(int onHand, int reserved) {
 
   public Stock reserve(int quantity) {
     positive(quantity);
-    if (quantity > available()) throw new DomainViolation("Insufficient available stock");
+    if (quantity > available()) throw new InsufficientStock();
     return new Stock(onHand, reserved + quantity);
   }
 

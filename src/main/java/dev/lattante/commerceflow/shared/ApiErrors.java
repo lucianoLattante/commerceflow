@@ -16,6 +16,30 @@ public class ApiErrors {
     return p;
   }
 
+  @ExceptionHandler(dev.lattante.commerceflow.inventory.InsufficientStock.class)
+  ProblemDetail stockConflict() {
+    return problem(HttpStatus.CONFLICT, "insufficient_stock", "Insufficient available stock");
+  }
+
+  @ExceptionHandler(dev.lattante.commerceflow.orders.IdempotencyConflict.class)
+  ProblemDetail idempotencyConflict() {
+    return problem(
+        HttpStatus.CONFLICT,
+        "idempotency_conflict",
+        "Idempotency-Key was already used for a different order request");
+  }
+
+  @ExceptionHandler(org.springframework.dao.TransientDataAccessException.class)
+  ResponseEntity<ProblemDetail> databaseBusy() {
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .header("Retry-After", "1")
+        .body(
+            problem(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "database_busy",
+                "Retry this request with the same idempotency key"));
+  }
+
   @ExceptionHandler(DomainViolation.class)
   ProblemDetail domain(DomainViolation e) {
     return problem(HttpStatus.BAD_REQUEST, "invalid_request", e.getMessage());
@@ -24,7 +48,8 @@ public class ApiErrors {
   @ExceptionHandler({
     MethodArgumentNotValidException.class,
     HttpMessageNotReadableException.class,
-    MethodArgumentTypeMismatchException.class
+    MethodArgumentTypeMismatchException.class,
+    org.springframework.web.bind.MissingRequestHeaderException.class
   })
   ProblemDetail validation(Exception e) {
     return problem(HttpStatus.BAD_REQUEST, "invalid_request", "Request validation failed");

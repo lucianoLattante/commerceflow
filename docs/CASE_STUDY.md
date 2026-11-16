@@ -1,32 +1,30 @@
-# Case study — commerce foundation
+# Case study — atomic order reservation
 
-## Current implemented decision
+## Implemented decision
 
-Start with a working catalog and identity boundary before introducing asynchronous order processing. This creates a reproducible foundation for testing later transaction and failure-recovery decisions.
+CommerceFlow starts as a modular monolith. The order increment keeps request idempotency, stock reservation, order snapshots and outbox persistence inside one MySQL transaction.
 
-Money is decimal and currency-aware; stock is bounded by domain and SQL constraints. Public readers cannot write catalog data, and registration cannot select ADMIN. Bearer tokens are digest-only and revocable. Flyway owns schema evolution.
+The key is scoped to the authenticated account and stored as a digest. Canonical product/quantity input makes line reordering an equivalent retry. Changed meaningful input returns a conflict. Inventory rows are locked in a fixed order and quantities are validated while locks are held. Prices and names come from the server and are snapshotted.
+
+A failed event insertion must not leave a reserved product or an order with no event. A committed event row is durable; it is not evidence of Kafka delivery.
 
 ## Evidence to demonstrate
 
-Run unit tests, then mvn verify with Docker. Show a customer receiving 403 for product creation, the administrator creating a product, duplicate SKU returning 409, a revoked token receiving 401 and search treating % literally. Inspect schema constraints and the token table without exposing raw credentials.
+Run mvn verify with Docker and inspect actual results. Demonstrate a new order, an equivalent retry returning the same order ID, a changed-payload 409, owner isolation and unchanged price snapshots after catalog edits.
 
-The first local result is 33 passing unit tests. Use the actual CI run for database/container evidence. Do not present planned order or Kafka work as a completed capability.
+The integration suite includes simultaneous same-key attempts, competing orders for limited stock, opposite input ordering and a temporary MySQL trigger rejecting outbox writes. It checks all affected tables and retries after the fault is removed. A migration test starts at V1 with existing records and applies V2.
 
-## Tradeoffs to explain
-
-- Why a shared-DB modular monolith precedes microservices.
-- Why opaque tokens favor immediate revocation at the cost of a database lookup.
-- Why a pure stock value object does not by itself prevent concurrent database overselling.
-- Why application validation and database constraints protect different entry points.
-- Why a successful compile differs from unit, MySQL integration and runtime-container verification.
+The CI additionally starts the containerized application and checks an order over network HTTP. Do not present planned payment/Kafka behavior or a successful compile as those checks.
 
 ## Interview questions
 
-1. What transaction boundary will be needed when an order reserves multiple products?
-2. How should an idempotency key be scoped, and what happens when its payload changes?
-3. What crash window will an outbox address?
-4. How would duplicate payment events affect stock if state transitions are not guarded?
-5. Which tests must be added before claiming prevention of overselling?
-6. What changes if authentication moves from explicit bearer headers to cookies?
+1. Why must the idempotency claim and stock writes share one commit boundary?
+2. What differs between ordinary INSERT duplicate errors and the locking upsert used here?
+3. Why does sorting locks reduce but not eliminate deadlock risk?
+4. How does the outbox-failure test prove JPA/JDBC transaction participation?
+5. Why are caller-supplied prices excluded from the request fingerprint?
+6. What does a pending outbox row prove, and what must a future publisher/consumer add?
+7. How will payment/cancellation/expiry guard exactly-once stock effects under repeated events?
+8. How should idempotency retention change once orders have a full lifecycle?
 
-Questions 1–5 partly concern the next increments; the current code does not implement those future answers.
+Questions 6–8 include subsequent increments; their future behavior is explicitly not implemented yet.

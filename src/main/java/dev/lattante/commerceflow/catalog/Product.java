@@ -73,6 +73,11 @@ class Product {
     return currency;
   }
 
+  void reserve(int quantity) {
+    Stock next = getStock().reserve(quantity);
+    this.reserved = next.reserved();
+  }
+
   Stock getStock() {
     return new Stock(onHand, reserved);
   }
