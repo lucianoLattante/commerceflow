@@ -37,7 +37,7 @@ admin = call("POST", "/api/auth/token", {
 })["accessToken"]
 suffix = uuid.uuid4().hex
 product = call("POST", "/api/products", {
-    "sku": "SMOKE-" + suffix, "name": "Order smoke fixture",
+    "sku": "SMOKE-" + suffix.upper(), "name": "Order smoke fixture",
     "amount": "12.34", "currency": "USD", "stock": 5,
 }, token=admin, expected=201)
 credentials = {"email": f"smoke-{suffix}@example.test", "password": secrets.token_urlsafe(24)}
