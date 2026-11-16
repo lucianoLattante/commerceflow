@@ -5,36 +5,46 @@
 ```mermaid
 flowchart TD
   Client["REST client"] --> Security["Bearer authentication"]
-  Security --> Catalog["Catalog application"]
-  Security --> Identity["Identity application"]
-  Catalog --> Stock["Stock and money invariants"]
-  Catalog --> DB["MySQL"]
+  Security --> Identity["Identity"]
+  Security --> Catalog["Catalog"]
+  Security --> Orders["Orders"]
+  Orders --> Inventory["Inventory reservation API"]
+  Orders --> Outbox["Transactional outbox adapter"]
+  Inventory --> DB["MySQL"]
+  Catalog --> DB
   Identity --> DB
-  Flyway["Flyway migrations"] --> DB
+  Orders --> DB
+  Outbox --> DB
 ```
 
-Java package boundaries define the current modules. Repositories/entities are package-private where practical; cross-module code uses application services or domain value objects. There is one Spring Boot process and one MySQL database. There are no network calls between modules and no implemented messaging pipeline yet.
+All modules run in one JVM with one database and transaction manager. The inventory interface is implemented within catalog persistence. Repositories/entities remain package-private where practical. No Kafka publisher or network call between modules exists yet.
 
 | Record | Persisted contract |
 | --- | --- |
-| app_users | Unique normalized email, BCrypt hash, ADMIN/CUSTOMER role, active state |
-| access_tokens | SHA-256 digest, user foreign key, expiry; no plaintext token |
-| products | Unique SKU, DECIMAL(19,2), supported currency, on-hand/reserved counts and version |
+| app_users | Normalized unique email, BCrypt hash, role and active state |
+| access_tokens | Token digest, user foreign key and expiry |
+| products | Unique SKU, decimal money, available/reserved stock and version |
+| customer_orders | Authenticated owner, RESERVED state, currency/total and creation time |
+| order_lines | Immutable product/name/price/quantity snapshots with line-total constraints |
+| idempotency_requests | Unique customer/key digest, normalized request hash, linked order |
+| outbox_events | Durable versioned ORDER_RESERVED JSON and unpublished marker |
 
-MySQL CHECK constraints protect stock non-negativity, reserved <= on-hand, positive price and supported currency. Domain Money rejects mixed-currency addition, fractional cents, overflow and negative values. Domain Stock cannot reserve beyond availability or release/consume more than reserved.
+V1 is unchanged. V2 adds the order-side tables and foreign keys without replacing existing identity/catalog data.
 
 ## Transactions and concurrency
 
-Registration, token issuance/revocation, bootstrap and product creation use application-service transactions. Unique email/SKU constraints resolve competing writes at the database boundary and map conflicts to 409. JPA validates the Flyway schema; it never updates schemas automatically.
+[ADR 3](adr/0003-transactional-order-creation.md) defines the creation boundary. One READ COMMITTED transaction claims idempotency, locks/reserves inventory in deterministic order, saves order snapshots, completes the claim and inserts the outbox event.
 
-The stock primitive is immutable. This increment does not expose reservation operations or claim transaction-safe order processing. A product version field alone is not evidence that concurrent reservations are implemented. CF-03 will introduce a single transaction spanning order snapshots, scoped idempotency, locked inventory and outbox persistence, with real competing-order and rollback tests.
+JpaTransactionManager coordinates JPA and JdbcTemplate on the same DataSource. Inventory, claim and outbox adapters require that transaction. A runtime failure rolls back all effects, including earlier flushed writes. Database deadlocks are still possible; transient database errors expose a retryable 503 instead of pretending success.
+
+Order reads enforce ownership in the application service. ADMIN may read a specific order; lists always contain only the caller's orders. Summaries do not eagerly fetch every line collection.
 
 ## Testing boundaries
 
-Unit tests cover numerical/inventory invariants and verify that invalid catalog values do not reach persistence. CommerceFlowIT starts real MySQL, applies migrations, validates JPA mappings and exercises HTTP authentication and catalog behavior. No external providers are involved.
+Unit tests cover money, stock, canonical request fingerprints and order totals/snapshots. MySQL/Testcontainers tests cover migration/schema, HTTP authorization, scoped retries, actual concurrent reservations and rollback after an injected outbox insertion failure.
 
-Container startup is verified separately by CI Compose smoke checks. Local unit success does not imply Docker/MySQL success.
+SchemaUpgradeIT verifies that applying V2 after populated V1 preserves identity/catalog records. A loopback-only Python smoke script exercises the actual Compose application's order/replay endpoints. Runtime evidence must come from executed CI, not compilation.
 
-## Limits
+## Current limits
 
-No order table, payment state machine, audit history, outbox publisher, Kafka consumer, Redis dependency, service extraction, production benchmark or deployment exists in this increment. They remain explicit roadmap work.
+Only creation into RESERVED is implemented. No stock consumption/release transition, expiry job, payment processing, Kafka publisher/consumer, Redis, audit trail, load benchmark or public deployment is claimed.

@@ -2,7 +2,9 @@
 
 Original commerce backend by Luciano Lattante. Built incrementally as a **modular monolith**, with Java 21, Spring Boot, MySQL and explicit domain invariants.
 
-**Current status: foundation/catalog increment.** Registration, opaque bearer authentication, ADMIN product creation, public catalog search/pagination, Flyway migrations, centralized errors, OpenAPI and metrics are implemented. The order-processing MVP is still in progress: orders, transactional reservation/idempotency/outbox, simulated payments, Kafka and Redis are subsequent increments.
+**Current status: transactional order-creation increment.** Identity/catalog foundation plus owned order snapshots, locked stock reservation, per-customer idempotency and durable outbox persistence are implemented. Simulated payment/cancellation/expiry, Kafka delivery and Redis remain subsequent increments. The full processing MVP is not complete.
+
+[Order API and transaction](docs/ORDERS.md)
 
 [Español](README.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/adr/0001-modular-monolith.md) · [Roadmap](ROADMAP.md)
 
@@ -59,6 +61,9 @@ The response is 201 with a Location header and the available quantity. Duplicate
 | POST /api/auth/token | Public credential exchange |
 | POST /api/auth/logout | Bearer; revokes the presented token |
 | GET /api/users/me | Bearer; current user only |
+| POST /api/orders | Bearer + Idempotency-Key |
+| GET /api/orders | Bearer; own summaries |
+| GET /api/orders/{id} | Owner or ADMIN |
 | GET /api/products, /api/products/{id} | Public |
 | POST /api/products | ADMIN |
 | GET /actuator/prometheus | ADMIN |
@@ -78,6 +83,8 @@ ADMIN bootstrap is explicit environment configuration. Existing administrator cr
 
 Account recovery, verification, refresh tokens, token cleanup, login rate limiting and full user/role administration are pending. This increment is intended for local evaluation; no public deployment is claimed.
 
+The order increment is documented in [ORDERS.md](docs/ORDERS.md) and [ADR 3](docs/adr/0003-transactional-order-creation.md). Outbox storage is implemented; Kafka publication is not.
+
 ## Tests
 
 ```bash
@@ -85,11 +92,11 @@ mvn test
 mvn verify
 ```
 
-- `test`: database-free unit tests. **33 passed locally** on 2026-11-16 with JDK 21.0.7 and Maven 3.9.0.
+- `test`: database-free unit tests. **54 passed locally** on 2026-11-16 with JDK 21.0.7 and Maven 3.9.0.
 - `verify`: includes CommerceFlowIT using disposable MySQL 8.4.11 through Testcontainers 2.0.5. It requires a working Docker daemon and fails when Docker is unavailable; it is not silently skipped.
-- [CI](.github/workflows/verify.yml): runs verify, validates Compose, builds/starts local containers and checks actual HTTP health/catalog responses. The [verification checkpoint](docs/VERIFICATION.md) records 33 unit + 24 MySQL integration tests and successful Compose runtime checks in CI.
+- [CI](.github/workflows/verify.yml): runs verify, validates Compose, builds/starts local containers and checks actual HTTP health/catalog responses. The [foundation checkpoint](docs/VERIFICATION.md) records the initial baseline; current PR checks track the additional order/rollback/concurrency suite.
 
-The unit result is not a claim that database concurrency, orders or payment invariants are implemented or tested. The immutable Stock primitive is tested; transactional reservation will be implemented with orders.
+The unit result alone is not evidence of MySQL concurrency or rollback. OrderFlowIT and SchemaUpgradeIT exercise those properties using disposable databases; consult their actual CI results. Payment transitions remain unimplemented.
 
 ## Technical evidence
 

@@ -17,3 +17,11 @@
 - CF-06: optional Redis rate limiting/cache, audit operations, expanded observability, failure demonstrations and interview case study.
 
 The order-processing MVP is not complete in the first catalog increment. Kafka/Redis and order processing are not implemented or claimed yet.
+
+## Transactional order increment
+- [x] Owned orders and immutable price/item snapshots; pagination/filtering.
+- [x] Sorted product locks, scoped idempotency claim and durable outbox in one transaction.
+- [x] Additive V2 migration; V1 preserved.
+- [x] 54 unit tests passed locally; integration suite compiles.
+- [x] CI run 43932466541 passed: 54 unit + 55 MySQL integration tests, upgrade preservation, late-failure rollback and real HTTP smoke.
+- [x] Prepared for integration after verification; PR #2 records the merge state. Payment/expiry transitions and Kafka delivery remain pending.

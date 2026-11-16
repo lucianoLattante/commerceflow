@@ -109,7 +109,7 @@ class CommerceFlowIT {
     assertThat(
             jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Long.class))
-        .isEqualTo(1);
+        .isEqualTo(2);
   }
 
   @Test
