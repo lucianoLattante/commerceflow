@@ -122,6 +122,16 @@ class CommerceFlowIT {
   }
 
   @Test
+  void basicCredentialsAreNotAnAlternativeToBearerAuthentication() throws Exception {
+    mvc.perform(
+            get("/api/users/me")
+                .with(
+                    org.springframework.security.test.web.servlet.request
+                        .SecurityMockMvcRequestPostProcessors.httpBasic(ADMIN, PASS)))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
   void anonymousWriteIsRejectedWithoutPersisting() throws Exception {
     mvc.perform(
             post("/api/products")
