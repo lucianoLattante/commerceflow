@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: commerceflow
+  datasource:
+    url: ${CF_DB_URL:jdbc:mysql://127.0.0.1:3306/commerceflow?connectionTimeZone=UTC}
+    username: ${CF_DB_USER}
+    password: ${CF_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+server:
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+springdoc:
+  swagger-ui:
+    path: /docs
+commerceflow:
+  token-lifetime: PT15M
