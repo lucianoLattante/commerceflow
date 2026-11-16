@@ -1,5 +1,6 @@
 package dev.lattante.commerceflow.identity;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.http.HttpStatus;
@@ -31,12 +32,14 @@ class IdentityController {
   }
 
   @PostMapping("/auth/logout")
+  @SecurityRequirement(name = "bearerAuth")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   void logout(@RequestHeader("Authorization") String authorization) {
     identity.revoke(authorization.substring(7));
   }
 
   @GetMapping("/users/me")
+  @SecurityRequirement(name = "bearerAuth")
   IdentityService.UserView me(@AuthenticationPrincipal Actor actor) {
     return identity.me(actor);
   }
