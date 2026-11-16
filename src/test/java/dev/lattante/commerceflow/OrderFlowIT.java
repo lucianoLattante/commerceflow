@@ -28,9 +28,11 @@ import org.testcontainers.mysql.MySQLContainer;
 class OrderFlowIT {
   private static final String ADMIN = "admin@example.test", PASS = "local-only-test-fixture";
 
+  // Disposable fault-injection database only; Compose does not enable this setting.
   @Container
   static final MySQLContainer MYSQL =
       new MySQLContainer("mysql:8.4.11")
+          .withCommand("--log-bin-trust-function-creators=1")
           .withDatabaseName("orders_test")
           .withUsername("test")
           .withPassword("test");

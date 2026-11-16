@@ -25,3 +25,5 @@ The protocol is MySQL-specific and serializes requests sharing a key or stock ro
 Orders currently remain RESERVED. Payment, cancellation and reservation-expiry transitions follow in CF-04. Kafka publishing/inbox/deduplication/retries/DLQ follow in CF-05.
 
 References: [MySQL locking reads](https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html), [duplicate-key locking](https://dev.mysql.com/doc/refman/8.4/en/innodb-locks-set.html), [Spring JPA/JDBC participation](https://docs.spring.io/spring-framework/docs/6.2.19/javadoc-api/org/springframework/orm/jpa/JpaTransactionManager.html).
+
+Order creation canonicalizes timestamps to MySQL TIMESTAMP(6) microsecond precision before persistence. This keeps the creation and replay representations stable; preserving nanoseconds only in the first in-memory response would break equality after a database round trip.

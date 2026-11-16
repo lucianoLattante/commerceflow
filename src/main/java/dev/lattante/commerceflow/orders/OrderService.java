@@ -61,7 +61,7 @@ public class OrderService {
 
   @Transactional(isolation = Isolation.READ_COMMITTED)
   public Creation create(Actor actor, String key, OrderSubmission request) {
-    Instant now = clock.instant();
+    Instant now = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     var claim = claims.claim(actor.id(), key, request.fingerprint(), now);
     if (!claim.fresh()) return new Creation(view(owned(claim.orderId(), actor)), true);
     var reserved = inventory.reserve(request.items());

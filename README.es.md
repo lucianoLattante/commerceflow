@@ -8,4 +8,4 @@ El nuevo incremento implementa órdenes con snapshots, propiedad, reserva transa
 
 El [README principal](README.md) contiene los comandos reproducibles de Docker Compose y Maven, ejemplos de API, límites y documentación. El script scripts/init-env.ps1 genera credenciales locales aleatorias y no sobrescribe .env.
 
-Se ejecutaron 53 pruebas unitarias con Java 21.0.7 y Maven 3.9.0. Las pruebas MySQL/Testcontainers necesitan Docker y se verifican en CI; su resultado debe consultarse en la ejecución correspondiente. No se declara un despliegue público.
+Se ejecutaron 54 pruebas unitarias con Java 21.0.7 y Maven 3.9.0. Las pruebas MySQL/Testcontainers necesitan Docker y se verifican en CI; su resultado debe consultarse en la ejecución correspondiente. No se declara un despliegue público.

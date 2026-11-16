@@ -92,7 +92,7 @@ mvn test
 mvn verify
 ```
 
-- `test`: database-free unit tests. **53 passed locally** on 2026-11-16 with JDK 21.0.7 and Maven 3.9.0.
+- `test`: database-free unit tests. **54 passed locally** on 2026-11-16 with JDK 21.0.7 and Maven 3.9.0.
 - `verify`: includes CommerceFlowIT using disposable MySQL 8.4.11 through Testcontainers 2.0.5. It requires a working Docker daemon and fails when Docker is unavailable; it is not silently skipped.
 - [CI](.github/workflows/verify.yml): runs verify, validates Compose, builds/starts local containers and checks actual HTTP health/catalog responses. The [foundation checkpoint](docs/VERIFICATION.md) records the initial baseline; current PR checks track the additional order/rollback/concurrency suite.
 
