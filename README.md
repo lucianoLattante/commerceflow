@@ -87,7 +87,7 @@ mvn verify
 
 - `test`: database-free unit tests. **33 passed locally** on 2026-11-16 with JDK 21.0.7 and Maven 3.9.0.
 - `verify`: includes CommerceFlowIT using disposable MySQL 8.4.11 through Testcontainers 2.0.5. It requires a working Docker daemon and fails when Docker is unavailable; it is not silently skipped.
-- [CI](.github/workflows/verify.yml): runs verify, validates Compose, builds/starts local containers and checks actual HTTP health/catalog responses. Refer to the run result for integration/container evidence.
+- [CI](.github/workflows/verify.yml): runs verify, validates Compose, builds/starts local containers and checks actual HTTP health/catalog responses. The [verification checkpoint](docs/VERIFICATION.md) records 33 unit + 24 MySQL integration tests and successful Compose runtime checks in CI.
 
 The unit result is not a claim that database concurrency, orders or payment invariants are implemented or tested. The immutable Stock primitive is tested; transactional reservation will be implemented with orders.
 

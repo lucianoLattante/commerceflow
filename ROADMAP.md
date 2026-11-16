@@ -6,8 +6,8 @@
 - [x] Opaque bearer authentication, registration as CUSTOMER, explicit ADMIN bootstrap, self-profile and logout.
 - [x] Product creation by ADMIN; public paginated/searchable catalog.
 - [x] Money and stock domain primitives.
-- [ ] Verify unit, HTTP and real MySQL integration tests; record actual evidence.
-- [ ] Merge first feature PR after checks.
+- [x] 33 unit + 24 MySQL integration tests and Compose runtime checks passed; see docs/VERIFICATION.md.
+- [x] First feature PR prepared and runtime-source checks passed; integration state is recorded in GitHub PR #1.
 
 ## Subsequent increments
 - CF-02: complete identity lifecycle and product administration after the foundation.
