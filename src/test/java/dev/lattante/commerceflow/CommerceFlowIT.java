@@ -11,9 +11,10 @@ import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.*;
@@ -23,6 +24,7 @@ import org.testcontainers.mysql.MySQLContainer;
 
 @SpringBootTest(properties = {"CF_BOOTSTRAP_ADMIN_EMAIL=", "CF_BOOTSTRAP_ADMIN_PASSWORD="})
 @AutoConfigureMockMvc
+@AutoConfigureObservability(tracing = false)
 @Testcontainers
 class CommerceFlowIT {
   private static final String ADMIN = "admin@example.test";
@@ -314,7 +316,14 @@ class CommerceFlowIT {
                     UUID.randomUUID().toString(),
                     "INVALID",
                     "Invalid"))
-        .isInstanceOf(DataIntegrityViolationException.class);
+        .isInstanceOf(DataAccessException.class)
+        .hasRootCauseInstanceOf(java.sql.SQLException.class)
+        .satisfies(
+            error -> {
+              var sql =
+                  (java.sql.SQLException) ((DataAccessException) error).getMostSpecificCause();
+              assertThat(sql.getErrorCode()).isEqualTo(3819);
+            });
     assertThat(productCount()).isZero();
   }
 }
