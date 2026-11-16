@@ -23,5 +23,5 @@ The order-processing MVP is not complete in the first catalog increment. Kafka/R
 - [x] Sorted product locks, scoped idempotency claim and durable outbox in one transaction.
 - [x] Additive V2 migration; V1 preserved.
 - [x] 54 unit tests passed locally; integration suite compiles.
-- [ ] Verify MySQL concurrency, late-failure rollback, V1 upgrade preservation and real HTTP smoke in CI.
-- [ ] Integrate after verification. Payment/expiry transitions and Kafka delivery remain pending.
+- [x] CI run 43932466541 passed: 54 unit + 55 MySQL integration tests, upgrade preservation, late-failure rollback and real HTTP smoke.
+- [x] Prepared for integration after verification; PR #2 records the merge state. Payment/expiry transitions and Kafka delivery remain pending.
