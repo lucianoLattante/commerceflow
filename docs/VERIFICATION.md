@@ -265,3 +265,65 @@ idempotent-response replay. Product audit starts with V6 administrative edits, e
 and routine order stock movements, and is append-only through the API rather than tamper-proof
 against database operators. No warehouse ledger, user administration, retention, full advisory audit,
 load capacity or production deployment was verified.
+
+## User administration — 2026-11-17
+
+Verified runtime source: `47734517574f964a2e204728e5508eea2ff10b8d`.
+[CI 44093544797](https://github.com/lucianoLattante/commerceflow/actions/runs/44093544797),
+job 134074637085, completed successfully.
+
+- 108 unit tests, zero failures/errors/skipped.
+- 146 integration tests: UserAdministrationIT 23, OrderFlowIT 73, CommerceFlowIT 24,
+  SchemaUpgradeIT 1, KafkaDeliveryIT 16 and RedisGuardIT 9; zero failures/errors/skipped.
+- Compose configuration/build/startup/readiness/catalog and network HTTP order/Kafka/catalog/
+  identity/admission flows passed. The identity smoke promoted and demoted a user with fresh login,
+  disabled/reactivated it without reviving old tokens, preserved its owned order and rejected removal
+  of the last active administrator. No deployment was performed.
+
+New real-MySQL scenarios cover competing self-disables, cross-demotions with stale principals,
+a latched login holding the target row while revocation waits, transactional audit failure/rollback,
+missing-guard fail-closed behavior, all-token revocation and fresh role permissions, no-op/stale
+revisions, bootstrap concurrency and refusal to undo demotion/disable, input/role/view boundaries,
+audit/list pagination and OpenAPI security. Populated upgrade preserves existing user/token data and
+starts new versions at zero, with an initialized guard and no fabricated audit. V1-V6 are unchanged.
+
+CI runtime: Ubuntu 24.04, Temurin 21.0.13+9, Maven 3.10.0, Docker server 28.0.4 and
+Compose v2.38.2. Dependencies were unchanged. Exact workflow commands:
+
+```bash
+java -version
+mvn -version
+docker version
+docker compose version
+mvn -B --no-transfer-progress verify
+docker compose config --quiet
+docker compose up -d --build --wait --wait-timeout 240
+curl --fail --silent --retry 30 --retry-all-errors --retry-delay 2 --max-time 5 http://localhost:8080/actuator/health/readiness
+curl --fail --silent http://localhost:8080/api/products
+python3 scripts/smoke-orders.py
+docker compose down --volumes
+```
+
+Local Windows: Oracle JDK 21.0.7 / Maven 3.9.0. The Java/Plexus Maven launcher ran
+`-B --no-transfer-progress -Dmaven.repo.local=C:/workspace/maven-commerceflow test`:
+108 database-free unit tests passed, zero failures/errors/skips. Final integration refinements
+then compiled with `test-compile`; this command did not execute tests. Full launcher arguments and
+exit codes are retained in the private verification record. No local integration execution is claimed
+because no Docker daemon was available. Markdown targets and Python AST validation also passed.
+
+All 125 source blobs matched the actual feature branch; the earlier 116-file catalog source copy
+remains intact. Only a real upstream feature branch/commit graph was used, not a fabricated local
+history. A limited credential-pattern check/manual changed-source review found no embedded live
+credentials; it does not establish a complete history or advisory audit. No failed CI run occurred.
+
+Follow-up evidence commits may change only documentation; runtime/tests/migrations/workflow/scripts/
+infrastructure must retain the verified source blobs. PR #7 records integration separately.
+The preceding catalog post-merge CI 44090679606 also completed successfully.
+
+Limits: membership guard serializes administration/bootstrap; per-account login locks include BCrypt.
+Mutations revalidate the operator after the guard, but general in-flight requests are not cancelled.
+Revisions require manual reconciliation, not automatic merge/idempotent-response replay. Bootstrap
+will not restore a disabled/demoted configured account. Audit covers V7 administrative state changes,
+excludes credential material and is append-only through the API rather than tamper-proof against
+DB operators. Email/password verification/recovery, MFA, refresh tokens, retention, full advisory
+audit, load capacity and production deployment remain deferred.

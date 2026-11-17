@@ -123,6 +123,41 @@ assert call("GET", "/api/products/" + product["id"])["available"] == 3
 assert call("GET", admin_path + "/audit", token=admin)["totalElements"] == 2
 print("Catalog HTTP smoke passed: ADMIN boundary, revisions, audit and original order totals.")
 
+
+# Role/activation changes revoke target credentials and preserve existing owned orders.
+user_path = "/api/admin/users/" + customer["id"]
+state = call("GET", user_path, token=admin)
+membership = {"expectedVersion": state["version"], "role": "ADMIN", "active": True,
+              "reason": "Disposable identity administration smoke"}
+call("GET", "/api/admin/users", token=access, expected=403)
+promoted = call("PUT", user_path, membership, token=admin)
+call("GET", "/api/users/me", token=access, expected=401)
+promoted_access = call("POST", "/api/auth/token", credentials)["accessToken"]
+assert call("GET", "/api/admin/users", token=promoted_access)["totalElements"] >= 2
+membership["expectedVersion"] = promoted["version"]
+membership["role"] = "CUSTOMER"
+demoted = call("PUT", user_path, membership, token=admin)
+call("GET", "/api/users/me", token=promoted_access, expected=401)
+customer_access = call("POST", "/api/auth/token", credentials)["accessToken"]
+call("GET", "/api/admin/users", token=customer_access, expected=403)
+membership["expectedVersion"] = demoted["version"]
+membership["active"] = False
+disabled = call("PUT", user_path, membership, token=admin)
+call("GET", "/api/users/me", token=customer_access, expected=401)
+membership["expectedVersion"] = disabled["version"]
+membership["active"] = True
+call("PUT", user_path, membership, token=admin)
+call("GET", "/api/users/me", token=customer_access, expected=401)
+access = call("POST", "/api/auth/token", credentials)["accessToken"]
+assert call("GET", "/api/orders/" + created["id"], token=access)["total"] == Decimal("24.68")
+assert call("GET", user_path + "/audit", token=admin)["totalElements"] == 4
+admin_identity = call("GET", "/api/users/me", token=admin)
+admin_state = call("GET", "/api/admin/users/" + admin_identity["id"], token=admin)
+call("PUT", "/api/admin/users/" + admin_identity["id"], {
+    "expectedVersion": admin_state["version"], "role": "CUSTOMER", "active": True,
+    "reason": "Last administrator protection smoke"}, token=admin, expected=409)
+print("Identity HTTP smoke passed: fresh login after role changes, revocation, reactivation and last admin.")
+
 # Compose enables admission. Existing smoke logins share this loopback socket budget.
 limited = False
 for attempt in range(6):

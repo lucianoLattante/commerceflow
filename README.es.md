@@ -4,7 +4,7 @@ Backend original de Luciano Lattante con Java 21, Spring Boot y MySQL, desarroll
 
 **Primer incremento:** registro como CUSTOMER, autenticación bearer opaca con revocación, creación de productos por ADMIN, catálogo público con búsqueda/paginación, migraciones Flyway, errores, métricas y OpenAPI.
 
-El incremento de órdenes incluye snapshots, propiedad, reserva transaccional, idempotencia por usuario y persistencia de outbox. CF-04 agrega pagos simulados aprobados/rechazados, cancelación y vencimiento de reservas a los 15 minutos, con stock y evento en una transacción. El [ciclo de órdenes](docs/LIFECYCLE.md) explica reintentos, permisos y límites. CF-05 incorpora Kafka, publicación con leases/reintentos, inbox/proyección idempotente, DLQ durable y replay administrativo auditado. La verificación se registra en CI. CF-06 incorpora Redis para limitar login/registros/escrituras, auditoría transaccional de órdenes y métricas de operaciones confirmadas; su alcance está en [OPERABILITY.md](docs/OPERABILITY.md). La administración de usuarios y la retención siguen pendientes. Ver [MESSAGING.md](docs/MESSAGING.md).
+El incremento de órdenes incluye snapshots, propiedad, reserva transaccional, idempotencia por usuario y persistencia de outbox. CF-04 agrega pagos simulados aprobados/rechazados, cancelación y vencimiento de reservas a los 15 minutos, con stock y evento en una transacción. El [ciclo de órdenes](docs/LIFECYCLE.md) explica reintentos, permisos y límites. CF-05 incorpora Kafka, publicación con leases/reintentos, inbox/proyección idempotente, DLQ durable y replay administrativo auditado. La verificación se registra en CI. CF-06 incorpora Redis para limitar login/registros/escrituras, auditoría transaccional de órdenes y métricas de operaciones confirmadas; su alcance está en [OPERABILITY.md](docs/OPERABILITY.md). La administración de usuarios se detalla abajo; la retención sigue pendiente. Ver [MESSAGING.md](docs/MESSAGING.md).
 
 El [README principal](README.md) contiene los comandos reproducibles de Docker Compose y Maven, ejemplos de API, límites y documentación. El script scripts/init-env.ps1 genera credenciales locales aleatorias y no sobrescribe .env.
 
@@ -21,3 +21,12 @@ bloqueo compartido con las reservas y auditoría en la misma transacción. Conse
 creadas y permite finalizar sus reservas aunque el producto esté inactivo. El [contrato de API](docs/CATALOG_ADMINISTRATION.md)
 explica los conflictos y reintentos; no se presenta como administración de usuarios ni libro de inventario.
 Verificación: 99 pruebas unitarias locales y CI 44089250548 con 99 unitarias + 123 de integración MySQL/Kafka/Redis, sin fallos, errores ni omisiones. Docker Compose y el flujo HTTP de administración también pasaron. La evidencia exacta está en [VERIFICATION.md](docs/VERIFICATION.md).
+
+## Administración de usuarios
+
+Se implementaron consultas ADMIN y cambios de rol/activación con versión esperada, auditoría y
+revocación de tokens en una transacción. Un bloqueo en MySQL conserva al menos un administrador
+activo; el login comparte el bloqueo del usuario para coordinar emisión y revocación. Promover o
+reactivar exige autenticarse nuevamente. El [contrato](docs/IDENTITY_ADMINISTRATION.md) documenta
+concurrencia, bootstrap y límites. Pasaron 108 unitarias locales y CI 44093544797 con 108 unitarias + 146 de integración MySQL/Kafka/Redis, sin fallos, errores ni omisiones. También pasaron Compose y los flujos HTTP de identidad.
+No se presenta como ciclo de identidad completo: recuperación/verificación, refresh y retención siguen pendientes.

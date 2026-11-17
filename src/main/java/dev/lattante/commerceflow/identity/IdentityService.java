@@ -8,6 +8,7 @@ import java.util.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -48,11 +49,11 @@ public class IdentityService {
                 normalize(email), encode(password), AppUser.Role.CUSTOMER, clock.instant())));
   }
 
-  @Transactional
+  @Transactional(isolation = Isolation.READ_COMMITTED)
   public IssuedToken login(String email, String password) {
     if (password == null || password.getBytes(StandardCharsets.UTF_8).length > 72)
       throw new DomainViolation("Invalid password length");
-    AppUser user = users.findByEmail(normalize(email)).orElse(null);
+    AppUser user = users.lockByEmail(normalize(email)).orElse(null);
     boolean valid = passwords.matches(password, user == null ? dummyHash : user.getPasswordHash());
     if (!valid || user == null || !user.isActive()) throw new Unauthorized();
     byte[] bytes = new byte[32];
@@ -82,15 +83,20 @@ public class IdentityService {
     return view(users.findById(actor.id()).orElseThrow(Unauthorized::new));
   }
 
-  @Transactional
+  @Transactional(isolation = Isolation.READ_COMMITTED)
   public void bootstrap(String email, String password) {
+    users
+        .lockAdministration()
+        .orElseThrow(() -> new IllegalStateException("Identity guard missing"));
     String normalized = normalize(email);
     users
-        .findByEmail(normalized)
+        .lockByEmail(normalized)
         .ifPresentOrElse(
             existing -> {
               if (existing.getRole() != AppUser.Role.ADMIN)
                 throw new IllegalStateException("Bootstrap account is not an administrator");
+              if (!existing.isActive())
+                throw new IllegalStateException("Bootstrap account is disabled");
             },
             () ->
                 users.save(

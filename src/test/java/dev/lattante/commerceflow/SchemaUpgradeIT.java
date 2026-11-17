@@ -46,6 +46,16 @@ class SchemaUpgradeIT {
         insert.executeUpdate();
       }
     }
+    try (Connection connection =
+            DriverManager.getConnection(
+                MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+        PreparedStatement token =
+            connection.prepareStatement(
+                "INSERT INTO access_tokens(digest,user_id,expires_at)"
+                    + " VALUES(REPEAT('a',64),?,'2030-01-01 00:00:00')")) {
+      token.setString(1, user);
+      token.executeUpdate();
+    }
     Flyway.configure()
         .dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
         .target("2")
@@ -101,9 +111,10 @@ class SchemaUpgradeIT {
             DriverManager.getConnection(
                 MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
         Statement statement = connection.createStatement()) {
-      try (ResultSet row = statement.executeQuery("SELECT email FROM app_users")) {
+      try (ResultSet row = statement.executeQuery("SELECT email,version FROM app_users")) {
         assertThat(row.next()).isTrue();
         assertThat(row.getString(1)).isEqualTo("upgrade@example.test");
+        assertThat(row.getLong(2)).isZero();
       }
       try (ResultSet row =
           statement.executeQuery(
@@ -145,6 +156,22 @@ class SchemaUpgradeIT {
         assertThat(row.getString(5)).isEqualTo(user);
         assertThat(row.next()).isFalse();
       }
+      try (ResultSet row =
+          statement.executeQuery("SELECT COUNT(*) FROM identity_admin_guard WHERE id=1")) {
+        row.next();
+        assertThat(row.getLong(1)).isEqualTo(1);
+      }
+      try (ResultSet row = statement.executeQuery("SELECT COUNT(*) FROM user_admin_audit")) {
+        row.next();
+        assertThat(row.getLong(1)).isZero();
+      }
+      try (ResultSet row =
+          statement.executeQuery(
+              "SELECT user_id,expires_at='2030-01-01 00:00:00' FROM access_tokens")) {
+        assertThat(row.next()).isTrue();
+        assertThat(row.getString(1)).isEqualTo(user);
+        assertThat(row.getBoolean(2)).isTrue();
+      }
       try (ResultSet row = statement.executeQuery("SELECT COUNT(*) FROM customer_orders")) {
         row.next();
         assertThat(row.getLong(1)).isEqualTo(1);
@@ -152,7 +179,7 @@ class SchemaUpgradeIT {
       try (ResultSet row =
           statement.executeQuery("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1")) {
         row.next();
-        assertThat(row.getLong(1)).isEqualTo(6);
+        assertThat(row.getLong(1)).isEqualTo(7);
       }
     }
   }
