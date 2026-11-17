@@ -25,7 +25,7 @@ re-authenticating does not extend a reservation.
 Each event has a new UUID, event_version 1, order/customer identifiers, status, total, currency and
 occurrence timestamp. It excludes bearer credentials and payment idempotency digests.
 ORDER_RESERVED retains its existing version-1 snapshot payload.
-Events remain unpublished outbox rows; there is no Kafka publisher in CF-04.
+CF-04 originally stored unpublished events. [CF-05](MESSAGING.md) adds Kafka transport, inbox and DLQ while preserving event identity and the lifecycle transaction.
 
 ## Owner API
 
@@ -92,5 +92,5 @@ batch failure isolation is unit tested, the due-ID query and expiry transactions
 against MySQL, and the Compose application starts with scheduling enabled.
 Consult [verification evidence](VERIFICATION.md) and PR #3 for actual execution results.
 
-No real payments, refunds, distributed messaging, external exactly-once processing, deployment,
+No real payments, refunds, external exactly-once processing, deployment,
 production load benchmark or complete financial/audit subsystem is claimed.
