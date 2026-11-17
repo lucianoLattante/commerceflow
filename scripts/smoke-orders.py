@@ -158,6 +158,22 @@ call("PUT", "/api/admin/users/" + admin_identity["id"], {
     "reason": "Last administrator protection smoke"}, token=admin, expected=409)
 print("Identity HTTP smoke passed: fresh login after role changes, revocation, reactivation and last admin.")
 
+
+# Maintenance is read-only; Compose enables bounded expiry cleanup.
+maintenance = call("GET", "/api/admin/operations/maintenance", token=admin)
+assert maintenance["cleanupEnabled"] is True
+assert maintenance["batchSize"] == 200 and maintenance["intervalMs"] == 60000
+assert maintenance["expiredTokens"] == 0
+assert all(key not in maintenance for key in ("digest", "accessToken", "userId"))
+call("GET", "/api/admin/operations/maintenance", token=access, expected=403)
+deliveries = call("GET", "/api/admin/messaging/deliveries?state=SENT&size=1", token=admin)
+assert deliveries["totalElements"] >= 1 and len(deliveries["content"]) == 1
+assert all(key not in deliveries["content"][0] for key in ("payload", "messageKey", "payloadHash"))
+assert call("GET", "/api/admin/messaging/deliveries", token=admin)["totalElements"] == 0
+assert call("GET", "/api/admin/messaging/dead-letters/page", token=admin)["totalElements"] == 0
+call("GET", "/api/admin/messaging/deliveries", token=access, expected=403)
+print("Maintenance HTTP smoke passed: aggregate status, typed metadata pages and ADMIN boundary.")
+
 # Compose enables admission. Existing smoke logins share this loopback socket budget.
 limited = False
 for attempt in range(6):

@@ -30,3 +30,11 @@ activo; el login comparte el bloqueo del usuario para coordinar emisión y revoc
 reactivar exige autenticarse nuevamente. El [contrato](docs/IDENTITY_ADMINISTRATION.md) documenta
 concurrencia, bootstrap y límites. Pasaron 108 unitarias locales y CI 44093544797 con 108 unitarias + 146 de integración MySQL/Kafka/Redis, sin fallos, errores ni omisiones. También pasaron Compose y los flujos HTTP de identidad.
 No se presenta como ciclo de identidad completo: recuperación/verificación, refresh y retención siguen pendientes.
+
+## Mantenimiento y demostración del MVP
+
+Compose habilita limpieza por lotes de tokens vencidos; en host está desactivada por defecto.
+Se preservan credenciales vigentes, órdenes, claves de idempotencia, inbox y auditorías. Hay consultas
+ADMIN de estado agregado y páginas de entregas/DLQ que no leen payloads. Ver [retención](docs/RETENTION.md),
+[ADR 9](docs/adr/0009-bounded-maintenance.md) y [demo reproducible](docs/DEMO.md).
+Pasaron 122 unitarias locales; integración y Compose/HTTP de este incremento pendientes de CI.

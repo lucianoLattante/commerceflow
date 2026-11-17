@@ -86,3 +86,14 @@ load tests, production proxy/broker/Redis hardening and deployment explicitly de
 - [x] CI 44093544797 passed 108 unit + 146 real MySQL/Kafka/Redis tests and Compose/HTTP identity smoke.
 - [x] Review paths, migrations, hashes and runtime evidence; PR #7 records integration state.
 - [ ] Next: retention/cleanup, operational visibility and final presentation.
+
+## Bounded maintenance and MVP handoff (in verification)
+
+- [x] Expired-token batches, SKIP LOCKED claims, per-key deletion, rollback and after-commit metrics.
+- [x] Read-only ADMIN maintenance metadata and bounded typed delivery/DLQ pages; legacy lists preserved.
+- [x] Explicit retention policy preserves business/replay/audit evidence; no migration changes.
+- [x] ADR 9, API/runbook, reproducible local MVP demo and interview guidance.
+- [x] 122 local unit tests passed; integration compiled only locally.
+- [ ] Execute full integration and Compose/HTTP maintenance smoke in CI.
+- [ ] Review/integrate and record the local MVP handoff.
+- [ ] Production follow-ups: capacity, broker/Redis hardening, cursor/index measurement and replay-safe archival.

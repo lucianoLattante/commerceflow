@@ -135,3 +135,11 @@ A database guard preserves the last active administrator; login issuance shares 
 Promotion/reactivation require fresh authentication. See the [API and concurrency contract](docs/IDENTITY_ADMINISTRATION.md)
 and [ADR 8](docs/adr/0008-identity-administration.md). CI 44093544797 passed **108 unit + 146 MySQL/Kafka/Redis integration tests**, with zero failures/errors/skips, plus Compose startup and actual HTTP identity flows.
 Email recovery/verification, refresh tokens and retention remain deferred.
+
+## Operational maintenance and local MVP demonstration
+
+Bounded expired-token cleanup is enabled by Compose and off by default on host. It preserves live
+credentials and all order/replay/audit evidence. ADMIN can read aggregate maintenance status and
+paged delivery/DLQ metadata without fetching payloads. See the [retention contract](docs/RETENTION.md),
+[ADR 9](docs/adr/0009-bounded-maintenance.md) and [reproducible local MVP demonstration](docs/DEMO.md).
+Local unit verification: 122 passed. MySQL/Kafka/Redis and Compose/HTTP execution for this increment is pending CI.
