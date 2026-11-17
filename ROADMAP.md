@@ -25,9 +25,9 @@ The distributed-processing MVP is not complete and no production deployment is c
 - [x] Execute MySQL races, late-failure rollback/retry and migration tests.
 - [x] Execute Docker Compose startup/readiness and network HTTP lifecycle checks.
 - [x] Document state machine, API contract, tradeoffs, limitations and interview demonstrations.
-- [ ] PR integration state is tracked by GitHub PR #3; do not infer merge state from test results.
+- [x] Integrated PR #3; post-merge CI 43986864165 passed.
 
-## Next — CF-05: durable messaging
+## Current — CF-05: durable messaging (verification pending)
 
 - [ ] Decide and document Kafka topic/event contracts and publisher acknowledgement boundaries.
 - [ ] Publish pending outbox events with a recoverable claim/retry strategy.
@@ -56,3 +56,8 @@ Payments are synthetic; no real money, card/bank data, refund or external provid
 Outbox rows are not yet Kafka delivery. Expiry has no exact timing SLA, and multiple JVMs would
 require synchronized clocks. A complete dependency advisory audit, production load benchmark
 and public deployment remain outside the executed evidence.
+
+CF-05 implements a durable transport queue, leased at-least-once publisher, ordered source events,
+an atomic inbox/projection, bounded retries, durable DLQ plus Kafka DLQ transport, and audited
+idempotent ADMIN replay/retry. The current branch awaits actual MySQL/Kafka and Compose execution;
+no passing count is claimed for this increment yet.

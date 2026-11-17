@@ -12,8 +12,14 @@ import org.springframework.transaction.annotation.*;
 public class JdbcOrderOutbox implements OrderEventSink {
   private final JdbcTemplate jdbc;
   private final ObjectMapper json;
+  private final dev.lattante.commerceflow.messaging.DispatchStore dispatch;
+  private final dev.lattante.commerceflow.messaging.OrderMessageCodec codec;
 
-  public JdbcOrderOutbox(JdbcTemplate jdbc, ObjectMapper json) {
+  public JdbcOrderOutbox(JdbcTemplate jdbc, ObjectMapper json,
+      dev.lattante.commerceflow.messaging.DispatchStore dispatch,
+      dev.lattante.commerceflow.messaging.OrderMessageCodec codec) {
+    this.dispatch = dispatch;
+    this.codec = codec;
     this.jdbc = jdbc;
     this.json = json;
   }
@@ -48,5 +54,8 @@ public class JdbcOrderOutbox implements OrderEventSink {
         type,
         payload,
         Timestamp.from(occurredAt));
+    dispatch.enqueue("ORDER", id.toString(), orderId, type.equals("ORDER_RESERVED") ? 1 : 2,
+        dev.lattante.commerceflow.messaging.OrderMessageCodec.TOPIC, orderId,
+        codec.encode(id, orderId, type, occurredAt, payload), occurredAt);
   }
 }

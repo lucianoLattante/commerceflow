@@ -76,3 +76,20 @@ declined = call("POST", "/api/orders/" + third["id"] + "/simulated-payment",
 assert declined["status"] == "PAYMENT_DECLINED"
 assert call("GET", "/api/products/" + product["id"])["available"] == 3
 print("Order HTTP smoke passed: ownership, totals, reservation, payment replay, cancel and decline.")
+
+
+# Kafka is enabled by Compose. Observe a separate asynchronous projection over HTTP.
+import time
+for order_id, terminal in ((created["id"], "PAID"), (second["id"], "CANCELLED"),
+                           (third["id"], "PAYMENT_DECLINED")):
+    until = time.monotonic() + 30
+    while True:
+        projection = call("GET", "/api/orders/" + order_id + "/projection", token=access)
+        if projection["status"] == terminal and projection["sequence"] == 2:
+            break
+        if time.monotonic() >= until:
+            raise RuntimeError("Kafka projection did not reach the expected terminal state")
+        time.sleep(0.25)
+call("GET", "/api/admin/messaging/dead-letters", token=access, expected=403)
+assert call("GET", "/api/admin/messaging/failures", token=admin) == []
+print("Kafka HTTP smoke passed: paid, cancelled and declined projections reached sequence 2.")

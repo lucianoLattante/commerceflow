@@ -11,6 +11,12 @@ spring:
       ddl-auto: validate
     properties:
       hibernate.jdbc.time_zone: UTC
+  kafka:
+    bootstrap-servers: ${CF_KAFKA_BOOTSTRAP:127.0.0.1:9092}
+  task:
+    scheduling:
+      pool:
+        size: 2
   flyway:
     enabled: true
 server:
@@ -35,3 +41,5 @@ springdoc:
     path: /docs
 commerceflow:
   token-lifetime: PT15M
+  messaging:
+    enabled: ${CF_MESSAGING_ENABLED:false}

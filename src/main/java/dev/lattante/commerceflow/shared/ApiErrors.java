@@ -46,6 +46,16 @@ public class ApiErrors {
                 "Retry this request with the same idempotency key"));
   }
 
+  @ExceptionHandler(dev.lattante.commerceflow.messaging.MessageFailure.Conflict.class)
+  ProblemDetail messageState() {
+    return problem(HttpStatus.CONFLICT, "message_state_conflict", "Message cannot be retried or replayed");
+  }
+
+  @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+  ProblemDetail accessDenied() {
+    return problem(HttpStatus.FORBIDDEN, "forbidden", "Operation is not permitted");
+  }
+
   @ExceptionHandler(DomainViolation.class)
   ProblemDetail domain(DomainViolation e) {
     return problem(HttpStatus.BAD_REQUEST, "invalid_request", e.getMessage());
