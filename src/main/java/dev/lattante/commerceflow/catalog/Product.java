@@ -78,6 +78,17 @@ class Product {
     this.reserved = next.reserved();
   }
 
+  void release(int quantity) {
+    Stock next = getStock().release(quantity);
+    this.reserved = next.reserved();
+  }
+
+  void consume(int quantity) {
+    Stock next = getStock().commit(quantity);
+    this.onHand = next.onHand();
+    this.reserved = next.reserved();
+  }
+
   Stock getStock() {
     return new Stock(onHand, reserved);
   }

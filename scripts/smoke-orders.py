@@ -54,4 +54,25 @@ assert created["total"] == Decimal("24.68")
 assert call("GET", "/api/products/" + product["id"])["available"] == 3
 assert call("GET", "/api/orders/" + created["id"], token=access)["id"] == created["id"]
 call("GET", "/api/orders/" + created["id"], expected=401)
-print("Order HTTP smoke passed: ownership, exact total, idempotent replay and stock.")
+paid = call("POST", "/api/orders/" + created["id"] + "/simulated-payment",
+            {"decision": "APPROVED"}, token=access, key="smoke-payment-" + suffix)
+assert paid["status"] == "PAID"
+assert call("POST", "/api/orders/" + created["id"] + "/simulated-payment",
+            {"decision": "APPROVED"}, token=access, key="smoke-payment-" + suffix) == paid
+assert call("GET", "/api/products/" + product["id"])["available"] == 3
+second = call("POST", "/api/orders", payload, token=access,
+              key="smoke-cancel-" + suffix, expected=201)
+assert call("GET", "/api/products/" + product["id"])["available"] == 1
+cancelled = call("POST", "/api/orders/" + second["id"] + "/cancel", token=access)
+assert cancelled["status"] == "CANCELLED"
+assert call("POST", "/api/orders/" + second["id"] + "/cancel", token=access) == cancelled
+assert call("GET", "/api/products/" + product["id"])["available"] == 3
+call("POST", "/api/orders/" + second["id"] + "/simulated-payment",
+     {"decision": "APPROVED"}, token=access, key="smoke-closed-" + suffix, expected=409)
+third = call("POST", "/api/orders", payload, token=access,
+             key="smoke-decline-" + suffix, expected=201)
+declined = call("POST", "/api/orders/" + third["id"] + "/simulated-payment",
+                {"decision": "DECLINED"}, token=access, key="smoke-decision-" + suffix)
+assert declined["status"] == "PAYMENT_DECLINED"
+assert call("GET", "/api/products/" + product["id"])["available"] == 3
+print("Order HTTP smoke passed: ownership, totals, reservation, payment replay, cancel and decline.")

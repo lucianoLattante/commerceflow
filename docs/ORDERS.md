@@ -1,6 +1,6 @@
 # Order creation and reservation
 
-Implemented in the order increment; this is not yet the payment/messaging MVP.
+Creation is implemented. The subsequent [lifecycle contract](LIFECYCLE.md) covers simulated payment, cancellation and expiry; Kafka delivery remains pending.
 
 ## API
 
@@ -18,7 +18,7 @@ Content-Type: application/json
 The server owns customer identity, prices, currency and totals. Requests contain 1–50 distinct products, quantity 1–1000 per line and one currency across the server-side prices. Keys contain 8–128 ASCII letters/digits or . _ : - and are scoped to the authenticated account.
 
 - First creation: 201, Location and Idempotency-Replayed: false.
-- Equivalent retry: 200, same order ID and snapshots, Idempotency-Replayed: true.
+- Equivalent retry: 200, same order ID and snapshots with its current lifecycle state, Idempotency-Replayed: true.
 - Same key/different normalized payload: 409 idempotency_conflict.
 - Insufficient stock: 409 insufficient_stock, with no committed claim/order/event.
 - Invalid input/key or mixed currencies: 400.
@@ -59,13 +59,13 @@ All application participants run in one JVM and use one database transaction. Th
 
 ## Event storage
 
-outbox_events stores an event ID, order ID, ORDER_RESERVED type, version 1, JSON snapshot, occurrence time and null published_at. It is durable and atomic with the order. There is no background publisher or Kafka delivery yet; a pending row is not a delivered message.
+outbox_events stores an event ID, order ID, type, version, JSON payload, occurrence time and null published_at. Creation emits ORDER_RESERVED version 1; [lifecycle completions](LIFECYCLE.md) add their own version-1 event types. It is durable and atomic with the order. There is no background publisher or Kafka delivery yet; a pending row is not a delivered message.
 
 ## Verification design
 
 OrderFlowIT uses real MySQL and concurrent HTTP requests through MockMvc. It checks scoped/reordered retries, changing payloads, ownership, snapshots, concurrent same-key attempts, competing stock requests and opposite line order.
 
-Failure tests include a missing/insufficient later product and a temporary MySQL trigger rejecting outbox insertion after the order flush. They assert rollback of reservations, order/lines, claim and event, then retry successfully. SchemaUpgradeIT applies V1, inserts synthetic existing data and applies V2 to verify preservation.
+Failure tests include a missing/insufficient later product and a temporary MySQL trigger rejecting outbox insertion after the order flush. They assert rollback of reservations, order/lines, claim and event, then retry successfully. SchemaUpgradeIT populates V1, applies V2 and inserts a reserved order, then applies V3 to verify preservation and its backfilled deadline.
 
 The CI also runs scripts/smoke-orders.py against the actual loopback-only Compose application. The script creates disposable fixture accounts/products and checks reservation/replay over network HTTP. It does not contact providers or accept a non-loopback host.
 
@@ -73,6 +73,6 @@ Local unit tests and compilation are recorded separately from MySQL/container ex
 
 ## Current limits
 
-Only RESERVED exists. Stock is held until a future payment/cancel/expiry implementation; no reservation expiry job exists. This is appropriate for local staged evaluation, not an assertion of production readiness.
+Reservations now finish through [simulated payment, cancellation or expiry](LIFECYCLE.md). Those transitions are local and transactional; this remains a staged portfolio implementation.
 
 No outbox publisher, Kafka, inbox deduplication, retry/DLQ mechanism, Redis, real payment or public deployment is implemented. Idempotency persistence and stock locks solve creation-side effects; they do not establish exactly-once messaging.

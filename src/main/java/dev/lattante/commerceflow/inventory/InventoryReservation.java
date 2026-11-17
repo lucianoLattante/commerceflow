@@ -11,4 +11,8 @@ public interface InventoryReservation {
   record ReservedItem(UUID productId, String sku, String name, Money unitPrice, int quantity) {}
 
   List<ReservedItem> reserve(List<Demand> demands);
+
+  void release(List<Demand> demands);
+
+  void consume(List<Demand> demands);
 }

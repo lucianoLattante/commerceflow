@@ -5,6 +5,8 @@ import dev.lattante.commerceflow.shared.*;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Duration;
+import dev.lattante.commerceflow.inventory.InventoryReservation.Demand;
 import java.util.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -35,6 +37,20 @@ class PurchaseOrder {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
+  @Column(name = "expires_at", nullable = false)
+  private Instant expiresAt;
+
+  @Column(name = "completed_at")
+  private Instant completedAt;
+
+  @Column(name = "payment_key_hash", length = 64)
+  private String paymentKeyHash;
+
+  @Enumerated(EnumType.STRING)
+  @JdbcTypeCode(SqlTypes.VARCHAR)
+  @Column(name = "payment_decision", length = 16)
+  private PaymentDecision paymentDecision;
+
   @ElementCollection
   @CollectionTable(name = "order_lines", joinColumns = @JoinColumn(name = "order_id"))
   @OrderColumn(name = "position")
@@ -49,6 +65,7 @@ class PurchaseOrder {
     order.id = UUID.randomUUID().toString();
     order.customerId = customerId;
     order.createdAt = now;
+    order.expiresAt = now.plus(Duration.ofMinutes(15));
     order.status = OrderStatus.RESERVED;
     for (ReservedItem item : reserved) {
       Money lineTotal = item.unitPrice().multiply(item.quantity());
@@ -58,6 +75,53 @@ class PurchaseOrder {
     order.total = total.amount();
     order.currency = total.currency();
     return order;
+  }
+
+  boolean due(Instant now) {
+    return status == OrderStatus.RESERVED && !now.isBefore(expiresAt);
+  }
+
+  void pay(String keyHash, PaymentDecision decision, Instant now) {
+    Objects.requireNonNull(keyHash);
+    Objects.requireNonNull(decision);
+    if (due(now)) throw new OrderStateConflict();
+    finish(decision == PaymentDecision.APPROVED
+        ? OrderStatus.PAID : OrderStatus.PAYMENT_DECLINED, now);
+    paymentKeyHash = keyHash;
+    paymentDecision = decision;
+  }
+
+  boolean paymentReplay(String keyHash, PaymentDecision decision) {
+    if (paymentKeyHash == null) return false;
+    if (!paymentKeyHash.equals(keyHash) || paymentDecision != decision)
+      throw new IdempotencyConflict();
+    return true;
+  }
+
+  void cancel(Instant now) {
+    if (due(now)) throw new OrderStateConflict();
+    finish(OrderStatus.CANCELLED, now);
+  }
+
+  void expire(Instant now) {
+    if (!due(now)) throw new OrderStateConflict();
+    finish(OrderStatus.EXPIRED, now);
+  }
+
+  private void finish(OrderStatus target, Instant now) {
+    if (status != OrderStatus.RESERVED) throw new OrderStateConflict();
+    if (now.isBefore(createdAt)) throw new IllegalStateException("Clock precedes order creation");
+    status = target;
+    completedAt = now;
+  }
+
+  Instant expiresAt() { return expiresAt; }
+
+  Instant completedAt() { return completedAt; }
+
+  List<Demand> demands() {
+    return lines.stream()
+        .map(l -> new Demand(UUID.fromString(l.productId), l.quantity)).toList();
   }
 
   @Embeddable

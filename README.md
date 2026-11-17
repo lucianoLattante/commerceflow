@@ -2,9 +2,9 @@
 
 Original commerce backend by Luciano Lattante. Built incrementally as a **modular monolith**, with Java 21, Spring Boot, MySQL and explicit domain invariants.
 
-**Current status: transactional order-creation increment.** Identity/catalog foundation plus owned order snapshots, locked stock reservation, per-customer idempotency and durable outbox persistence are implemented. Simulated payment/cancellation/expiry, Kafka delivery and Redis remain subsequent increments. The full processing MVP is not complete.
+**Current status: verified order lifecycle increment.** Owned orders, transactional reservation, simulated payment, cancellation and reservation expiry are implemented in this branch. No real money or external payment provider is used. Kafka delivery and Redis remain subsequent increments; the distributed-processing MVP is not complete.
 
-[Order API and transaction](docs/ORDERS.md)
+[Order creation](docs/ORDERS.md) · [Payment, cancellation and expiry](docs/LIFECYCLE.md)
 
 [Español](README.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/adr/0001-modular-monolith.md) · [Roadmap](ROADMAP.md)
 
@@ -64,6 +64,8 @@ The response is 201 with a Location header and the available quantity. Duplicate
 | POST /api/orders | Bearer + Idempotency-Key |
 | GET /api/orders | Bearer; own summaries |
 | GET /api/orders/{id} | Owner or ADMIN |
+| POST /api/orders/{id}/simulated-payment | Owner + Idempotency-Key; simulator only |
+| POST /api/orders/{id}/cancel | Owner; idempotent cancellation |
 | GET /api/products, /api/products/{id} | Public |
 | POST /api/products | ADMIN |
 | GET /actuator/prometheus | ADMIN |
@@ -92,17 +94,18 @@ mvn test
 mvn verify
 ```
 
-- `test`: database-free unit tests. **54 passed locally** on 2026-11-16 with JDK 21.0.7 and Maven 3.9.0.
-- `verify`: includes CommerceFlowIT using disposable MySQL 8.4.11 through Testcontainers 2.0.5. It requires a working Docker daemon and fails when Docker is unavailable; it is not silently skipped.
+- `test`: database-free unit tests. **65 passed in CF-04 CI**. The earlier local checkpoint ran 54 with JDK 21.0.7 and Maven 3.9.0; no new local run is claimed while the workstation is unavailable.
+- `verify`: **78 MySQL integration tests passed in CF-04 CI**, including order lifecycle, concurrency, rollback and migration preservation, using disposable MySQL 8.4.11 through Testcontainers 2.0.5. It requires a working Docker daemon and fails when Docker is unavailable; it is not silently skipped.
 - [CI](.github/workflows/verify.yml): runs verify, validates Compose, builds/starts local containers and checks actual HTTP health/catalog responses. The [foundation checkpoint](docs/VERIFICATION.md) records the initial baseline; current PR checks track the additional order/rollback/concurrency suite.
 
-The unit result alone is not evidence of MySQL concurrency or rollback. OrderFlowIT and SchemaUpgradeIT exercise those properties using disposable databases; consult their actual CI results. Payment transitions remain unimplemented.
+The unit result alone is not evidence of MySQL concurrency or rollback. OrderFlowIT and SchemaUpgradeIT exercise those properties using disposable databases; consult their actual CI results. [CF-04 run 43985895558](https://github.com/lucianoLattante/commerceflow/actions/runs/43985895558) passed all 143 tests and Compose/HTTP checks; see the exact source commit and limits in [VERIFICATION.md](docs/VERIFICATION.md).
 
 ## Technical evidence
 
 - [Architecture and domain](docs/ARCHITECTURE.md)
 - [ADR 1: modular monolith](docs/adr/0001-modular-monolith.md)
 - [ADR 2: opaque bearer credentials](docs/adr/0002-opaque-tokens.md)
+- [ADR 4: order lifecycle](docs/adr/0004-order-lifecycle.md)
 - [Case study and interview discussion](docs/CASE_STUDY.md)
 
 The repository contains original portfolio code, with no employer source or production data.
