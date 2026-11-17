@@ -75,4 +75,7 @@ Local unit tests and compilation are recorded separately from MySQL/container ex
 
 Reservations now finish through [simulated payment, cancellation or expiry](LIFECYCLE.md). Those transitions are local and transactional; this remains a staged portfolio implementation.
 
-CF-05 implements the publisher, Kafka, inbox and retry/DLQ mechanism. Redis, real payment and public deployment remain unimplemented. Idempotency persistence and stock locks solve creation-side effects; they do not establish exactly-once messaging.
+CF-05 implements the publisher, Kafka, inbox and retry/DLQ mechanism. CF-06 adds Redis admission; real payment and public deployment remain unimplemented. Idempotency persistence and stock locks solve creation-side effects; they do not establish exactly-once messaging.
+
+CF-06 adds owner/ADMIN audit reads and ADMIN audit pagination. Admission can reject a request
+before the creation transaction without consuming its idempotency key; see [operability](OPERABILITY.md).

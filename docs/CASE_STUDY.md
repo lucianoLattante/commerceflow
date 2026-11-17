@@ -62,3 +62,18 @@ Only present scenarios whose linked CI execution passed.
 18. Why must inbox insertion and projection update share one transaction?
 19. Why persist a durable DLQ intent before advancing the original offset?
 20. How do operator idempotency and replay budgets constrain accidental repeated recovery?
+
+## Admission and observation demonstration
+Pause the disposable Redis and show a protected write returning 503 without any order/stock/claim/audit
+change. Reads, logout and authenticated metrics remain available. Restore Redis and retry the same key.
+Then inject an outbox SQL failure after audit registration: audit and committed-transition counters
+must both remain unchanged. Demonstrate an exhausted Redis counter without a TTL being repaired
+without an extra allowance.
+
+21. Why is a permissive process-local fallback unsuitable for this enabled admission policy?
+22. How does one atomic Redis script avoid races between counter increment and expiry?
+23. Which request identity is trustworthy without a configured reverse-proxy boundary?
+24. Why must logout remain possible after write allowance exhaustion?
+25. Why record business counters after commit, while send attempts have different semantics?
+26. Why are durable audit, restartable counters and read-time gauges different kinds of evidence?
+27. Why must a failed database observation be unknown rather than a healthy zero?

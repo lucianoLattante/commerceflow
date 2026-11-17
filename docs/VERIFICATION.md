@@ -138,3 +138,71 @@ Limits: one local PLAINTEXT broker with replication factor 1; no production ACL/
 certification, full advisory audit, retention policy, load benchmark or public deployment.
 Flyway's existing MySQL-version support warning remains. Functional migrations are demonstrated;
 vendor certification is not claimed. The CF-04 scheduler-timing and clock limitations still apply.
+
+## CF-06 admission/audit/metrics checkpoint — 2026-11-17
+
+Runtime source: `9e62dd4ef5a22eb4ae2f64bda01c957052a2f663`.
+[CI run 44083936277](https://github.com/lucianoLattante/commerceflow/actions/runs/44083936277),
+job 134041304697: success. **90 unit + 108 integration tests**, zero failures/errors/skipped.
+
+Integration split: 58 OrderFlowIT, 24 CommerceFlowIT, 1 SchemaUpgradeIT, 16 KafkaDeliveryIT,
+9 RedisGuardIT. These execute actual disposable MySQL 8.4.11, Kafka 4.1.1 and Redis 8.2.11.
+
+Verified cases include concurrent Redis limiter instances, TTL expiry and exhausted-counter TTL repair,
+forged forwarding headers, policy/actor isolation, authorization before admission, and logout exemption.
+Docker pause/unpause verifies fail-closed HTTP 503 without business writes, readable metrics/public
+catalog, readiness degradation, then recovery using the same unconsumed order idempotency key.
+Audit failure and a later outbox failure verify rollback and absence of after-commit counter increments.
+Payment retries and expiry no-ops produce one audit/counter per transition. Prior Kafka races,
+broker-ack crash-window, DLQ/replay and migration preservation tests continue to pass.
+
+Compose config, image build/startup/readiness/catalog, order lifecycle, Kafka projection and new
+audit/admission network HTTP smoke all passed. No public deployment was performed.
+
+CI toolchain: Ubuntu 24.04, Temurin 21.0.13+9, Maven 3.10.0, Docker server 28.0.4,
+Compose v2.38.2, Testcontainers 2.0.5. Spring Boot continues to manage the Redis/Lettuce dependencies;
+no override was introduced. Redis image is fixed at 8.2.11.
+
+```bash
+java -version
+mvn -version
+docker version
+docker compose version
+mvn -B --no-transfer-progress verify
+docker compose config --quiet
+docker compose up -d --build --wait --wait-timeout 240
+curl --fail --silent --retry 30 --retry-all-errors --retry-delay 2 --max-time 5 http://localhost:8080/actuator/health/readiness
+curl --fail --silent http://localhost:8080/api/products
+python3 scripts/smoke-orders.py
+docker compose down --volumes
+```
+
+Local Windows: Oracle JDK 21.0.7 and Maven 3.9.0. Maven was launched through its Plexus Classworlds
+Java entry point with `-B --no-transfer-progress -Dmaven.repo.local=C:/workspace/maven-commerceflow test`.
+90 unit tests passed twice (initial source and TTL-repair refinement); integration classes compiled.
+No local integration execution is claimed because the Docker daemon was unavailable.
+Standalone Compose 5.7.1 validated configuration without starting services.
+The exact launcher arguments are retained in the private working verification record.
+
+PowerShell checks executed init-env.ps1 and add-redis-env.ps1 in an isolated generated fixture folder.
+They created four independent random secrets, refused overwrites and preserved prior bytes/settings;
+values were never printed. These script checks are not counted as JUnit tests.
+
+Initial CI 44083159190 passed 90 unit + 107 integration tests and Compose/HTTP before the additional
+TTL-repair case. No failed CI result was encountered in this increment. Final source above verifies
+the repair and 108 integration cases. Documentation-only commits after it must preserve all
+runtime/test/migration/workflow/script/infrastructure blobs unchanged.
+
+The previous local source folder contained partial older edits and was left unchanged.
+A new plain source working copy was materialized from the real upstream commit; it is not presented
+as a Git clone/history. The feature branch and PR use the upstream Git commit graph.
+The shell Git transport remained blocked by DNS/thread startup, so the authorized GitHub connector
+handled branch/PR operations. No new authentication was needed for that route.
+
+Limits: admission defaults off for host builds and is enabled in Compose. Enabled Redis failure
+denies protected requests, with no permissive fallback. Socket quotas need an explicit trusted-proxy
+design before deployment; window boundary bursts, NAT sharing and Redis restart quota resets remain.
+Order audit starts with V5 without fabricated history. Gauges are non-atomic observations and process
+counters reset on restart. Redis TLS/ACL/HA, complete abuse defense, retention, complete identity/product
+administration, full advisory audit, load capacity and public deployment remain unverified.
+The existing Flyway MySQL-support warning and CF-04/05 clock/security limitations are not closed.

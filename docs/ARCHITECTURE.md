@@ -5,12 +5,16 @@
 ```mermaid
 flowchart TD
   Client["REST client"] --> Security["Bearer authentication"]
-  Security --> Identity["Identity"]
-  Security --> Catalog["Catalog"]
-  Security --> Orders["Orders"]
+  Security --> Admission["Admission by policy"]
+  Admission --> Redis["Redis quota window"]
+  Admission --> Identity["Identity"]
+  Admission --> Catalog["Catalog"]
+  Admission --> Orders["Orders"]
   Expiry["Bounded expiry worker"] --> Orders
   Orders --> Inventory["Inventory reservation API"]
   Orders --> Outbox["Transactional outbox adapter"]
+  Orders --> Audit["Transactional operation audit"]
+  Audit --> DB
   Inventory --> DB["MySQL"]
   Catalog --> DB
   Identity --> DB
@@ -50,7 +54,7 @@ SchemaUpgradeIT populates V1 identity/catalog, applies V2 and creates an existin
 
 ## Current limits
 
-The local simulated lifecycle is implemented; see [LIFECYCLE.md](LIFECYCLE.md). Kafka publisher/consumer and operator recovery audit are implemented in CF-05. No real provider/refunds, Redis, complete audit trail, benchmark or public deployment is claimed. Expiry scans are bounded and have no exact timing SLA.
+The local simulated lifecycle is implemented; see [LIFECYCLE.md](LIFECYCLE.md). Kafka publisher/consumer and operator recovery audit are implemented in CF-05. CF-06 adds Redis admission and order audit/metrics; the [operability contract](OPERABILITY.md) defines outage and commit semantics. No real provider/refunds, complete audit trail for every operation, benchmark or public deployment is claimed. Expiry scans are bounded and have no exact timing SLA.
 
 ## Messaging persistence
 V4 preserves V1–V3 and backfills message_dispatch from business outbox rows.
@@ -58,3 +62,9 @@ message_dispatch stores immutable bytes, fenced leases and bounded retries. mess
 within the projection transaction. message_dead_letters and message_operator_requests retain durable
 recovery and idempotent actor-attributed operator actions. [ADR 5](adr/0005-durable-kafka.md) describes
 acknowledgement boundaries and tradeoffs; the messaging diagram describes the implemented flow.
+
+## Admission and audit boundaries
+Authorization precedes Redis admission; logout/reads remain available when write admission fails.
+V5 starts order_operation_audit without invented history. Audit changes share the business transaction;
+transition counters run after commit. Redis stores no authoritative order/stock/idempotency state.
+See [ADR 6](adr/0006-admission-audit-metrics.md).
