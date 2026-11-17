@@ -8,6 +8,8 @@ Original commerce backend by Luciano Lattante. Built incrementally as a **modula
 
 [Español](README.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/adr/0001-modular-monolith.md) · [Roadmap](ROADMAP.md)
 
+Windows/Swagger walkthrough: [Probar en local](docs/LOCAL_TESTING.es.md).
+
 ## Run locally
 
 Requirements: Docker Engine with Compose v2. For host builds: Java 21 and Maven 3.6.3+.

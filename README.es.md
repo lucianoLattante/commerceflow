@@ -20,6 +20,8 @@ y los flujos HTTP. La [evidencia](docs/VERIFICATION.md) identifica fuente, coman
 - Auditorías, métricas y páginas administrativas que no leen payloads.
 - Limpieza por lotes de tokens vencidos, preservando evidencia de negocio, replay e idempotencia.
 
+[Guía paso a paso con Swagger](docs/LOCAL_TESTING.es.md).
+
 ## Ejecutar localmente
 
 Requisitos: Docker Engine con Compose. Para compilar en host: Java 21 y Maven 3.6.3+.
