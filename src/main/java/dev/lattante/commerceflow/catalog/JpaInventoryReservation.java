@@ -50,8 +50,14 @@ class JpaInventoryReservation implements InventoryReservation {
     for (Demand demand : demands.stream()
         .sorted(Comparator.comparing(d -> d.productId().toString())).toList()) {
       Product product = products.lockById(demand.productId().toString()).orElseThrow(NotFound::new);
-      if (consume) product.consume(demand.quantity());
-      else product.release(demand.quantity());
+      try {
+        if (consume) product.consume(demand.quantity());
+        else product.release(demand.quantity());
+      } catch (DomainViolation inconsistentReservation) {
+        // These quantities originate from a persisted order, not from caller input.
+        throw new IllegalStateException("Persisted inventory reservation is inconsistent",
+            inconsistentReservation);
+      }
     }
   }
 }

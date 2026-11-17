@@ -848,7 +848,8 @@ class OrderFlowIT {
         .body().get("id").asText();
     // Deliberate test-only drift: still satisfies product CHECK, but violates the order reservation.
     jdbc.update("UPDATE products SET reserved=0 WHERE id=?", ids.get(1));
-    payment(owner.token(), order, "multi-line-payment", "APPROVED").andExpect(status().isBadRequest());
+    payment(owner.token(), order, "multi-line-payment", "APPROVED")
+        .andExpect(status().isInternalServerError()).andExpect(jsonPath("$.code").value("internal_error"));
     stockIs(ids.get(0), 10, 2);
     stockIs(ids.get(1), 10, 0);
     assertThat(state(order)).isEqualTo("RESERVED");
