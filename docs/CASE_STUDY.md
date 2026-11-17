@@ -14,7 +14,7 @@ Run mvn verify with Docker and inspect actual results. Demonstrate a new order, 
 
 The integration suite includes simultaneous same-key attempts, competing orders for limited stock, opposite input ordering and a temporary MySQL trigger rejecting outbox writes. It checks all affected tables and retries after the fault is removed. A migration test starts with V1 identity/catalog, adds a V2 order and verifies V3 preservation/backfilled expiry.
 
-The CI additionally starts the containerized application and checks an order over network HTTP. It also approves/replays a simulated payment, cancels/replays another order and declines a third. Kafka remains planned, and a successful compile does not count as runtime execution.
+The CI additionally starts the containerized application and checks an order over network HTTP. It also approves/replays a simulated payment, cancels/replays another order and declines a third. CF-05 adds actual Kafka delivery; a successful compile still does not count as runtime execution.
 
 ## Interview questions
 
@@ -23,11 +23,11 @@ The CI additionally starts the containerized application and checks an order ove
 3. Why does sorting locks reduce but not eliminate deadlock risk?
 4. How does the outbox-failure test prove JPA/JDBC transaction participation?
 5. Why are caller-supplied prices excluded from the request fingerprint?
-6. What does a pending outbox row prove, and what must a future publisher/consumer add?
+6. What do a pending outbox row, broker acknowledgement and committed inbox each prove?
 7. How do order locks and terminal guards prevent repeated stock consumption/release?
 8. How should idempotency retention change once orders have a full lifecycle?
 
-Questions 6 and 8 include future messaging/retention policies. The implemented [lifecycle ADR](adr/0004-order-lifecycle.md) explains question 7.
+Question 8 includes future retention policies; question 6 is demonstrated by CF-05. The implemented [lifecycle ADR](adr/0004-order-lifecycle.md) explains question 7.
 
 ## Lifecycle discussion for an interview
 
@@ -47,3 +47,18 @@ Additional questions:
 12. Why does an access-token refresh not extend the order reservation?
 13. Which guarantees depend on synchronized clocks and the single MySQL transaction boundary?
 14. How would an asynchronous payment provider require pending states, reconciliation and compensation?
+
+## Kafka failure demonstration
+[ADR 5](adr/0005-durable-kafka.md) separates business commit, broker acknowledgement and consumer
+application. Show each observation rather than equate them. The integration suite injects a DB
+failure after a real broker acknowledgement, then expires the lease. Inspect two broker records
+carrying the same event but one committed inbox row. Next reject a projection write, inspect bounded
+retries and durable recovery, repair the dependency and replay exact bytes with an audited ADMIN key.
+Only present scenarios whose linked CI execution passed.
+
+15. Why does producer idempotence not close the broker-ack/database-mark crash window?
+16. What does a lease token fence, and why can a paused sender still publish a duplicate?
+17. How do source sequence gates interact with a failed predecessor and operator replay?
+18. Why must inbox insertion and projection update share one transaction?
+19. Why persist a durable DLQ intent before advancing the original offset?
+20. How do operator idempotency and replay budgets constrain accidental repeated recovery?

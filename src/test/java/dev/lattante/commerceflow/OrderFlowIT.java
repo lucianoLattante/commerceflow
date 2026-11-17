@@ -63,8 +63,14 @@ class OrderFlowIT {
     org.mockito.Mockito.when(lifecycleClock.instant())
         .thenReturn(java.time.Instant.parse("2026-01-01T00:00:00.123456789Z"));
     jdbc.execute("DROP TRIGGER IF EXISTS reject_outbox");
+    jdbc.execute("DROP TRIGGER IF EXISTS reject_dispatch");
     for (String table :
         List.of(
+            "message_operator_requests",
+            "message_dead_letters",
+            "message_inbox",
+            "order_projections",
+            "message_dispatch",
             "outbox_events",
             "idempotency_requests",
             "order_lines",
@@ -897,5 +903,21 @@ class OrderFlowIT {
     assertThat(lifecycle.dueCandidates()).hasSize(100)
         .doesNotContain(due.getFirst(), future, cancelled);
     stockIs(product, 200, 102); // 101 remaining due + one future; cancellation/expiry released
+  }
+
+  @Test
+  void transportEnqueueFailureAlsoRollsBackTheBusinessOutboxAndReservation() throws Exception {
+    String product=product("A",10);
+    jdbc.execute("CREATE TRIGGER reject_dispatch BEFORE INSERT ON message_dispatch FOR EACH ROW"
+        + " SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected transport failure'");
+    try {
+      submit(owner.token(),"transport-rollback-key",items(product,2)).andExpect(status().isInternalServerError());
+      nothingCommitted();
+      stockIs(product,10,0);
+      assertThat(count("message_dispatch")).isZero();
+    } finally { jdbc.execute("DROP TRIGGER reject_dispatch"); }
+    submit(owner.token(),"transport-rollback-key",items(product,2)).andExpect(status().isCreated());
+    assertThat(count("outbox_events")).isEqualTo(1);
+    assertThat(count("message_dispatch")).isEqualTo(1);
   }
 }

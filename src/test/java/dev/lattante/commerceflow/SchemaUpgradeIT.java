@@ -66,6 +66,17 @@ class SchemaUpgradeIT {
         statement.executeUpdate("UPDATE products SET reserved=2");
       }
     }
+    try (Connection connection = DriverManager.getConnection(
+        MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
+        PreparedStatement insert = connection.prepareStatement("""
+          INSERT INTO outbox_events(id,order_id,event_type,event_version,payload,occurred_at)
+          VALUES(?,?,'ORDER_RESERVED',1,JSON_OBJECT('eventId',?,'orderId',?,'customerId',?,
+            'occurredAt','2026-01-01T00:00:00.123456Z'), '2026-01-01 00:00:00.123456')
+          """)) {
+      String event=UUID.randomUUID().toString();
+      insert.setString(1,event);insert.setString(2,order);insert.setString(3,event);
+      insert.setString(4,order);insert.setString(5,user);insert.executeUpdate();
+    }
     Flyway.configure()
         .dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
         .load().migrate();
@@ -100,6 +111,17 @@ class SchemaUpgradeIT {
         assertThat(row.getInt(1)).isEqualTo(2);
         assertThat(row.getBigDecimal(2)).isEqualByComparingTo("24.68");
       }
+      try (ResultSet row = statement.executeQuery(
+          "SELECT kind,state,aggregate_sequence,JSON_UNQUOTE(JSON_EXTRACT(payload,'$.type')),"
+          + "JSON_UNQUOTE(JSON_EXTRACT(payload,'$.payload.customerId')) FROM message_dispatch")) {
+        assertThat(row.next()).isTrue();
+        assertThat(row.getString(1)).isEqualTo("ORDER");
+        assertThat(row.getString(2)).isEqualTo("PENDING");
+        assertThat(row.getInt(3)).isEqualTo(1);
+        assertThat(row.getString(4)).isEqualTo("ORDER_RESERVED");
+        assertThat(row.getString(5)).isEqualTo(user);
+        assertThat(row.next()).isFalse();
+      }
       try (ResultSet row = statement.executeQuery("SELECT COUNT(*) FROM customer_orders")) {
         row.next();
         assertThat(row.getLong(1)).isEqualTo(1);
@@ -107,7 +129,7 @@ class SchemaUpgradeIT {
       try (ResultSet row =
           statement.executeQuery("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1")) {
         row.next();
-        assertThat(row.getLong(1)).isEqualTo(3);
+        assertThat(row.getLong(1)).isEqualTo(4);
       }
     }
   }

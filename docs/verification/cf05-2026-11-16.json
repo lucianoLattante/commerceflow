@@ -1,0 +1,58 @@
+{
+  "checkpoint": "CF-05",
+  "dateArgentina": "2026-11-16",
+  "sourceCommit": "bc5ba33a59bf4a27c26b160313b2c79a0acd17dc",
+  "runId": 43992169237,
+  "jobId": 133735252539,
+  "conclusion": "success",
+  "url": "https://github.com/lucianoLattante/commerceflow/actions/runs/43992169237",
+  "unit": {
+    "tests": 82,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "integration": {
+    "tests": 95,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "classes": {
+      "OrderFlowIT": 54,
+      "CommerceFlowIT": 24,
+      "SchemaUpgradeIT": 1,
+      "KafkaDeliveryIT": 16
+    }
+  },
+  "compose": {
+    "config": "passed",
+    "buildStartup": "passed",
+    "readinessCatalog": "passed",
+    "networkLifecycleSmoke": "passed",
+    "networkKafkaProjections": "passed",
+    "deployment": false
+  },
+  "runtime": {
+    "os": "ubuntu-24.04",
+    "java": "Temurin 21.0.13+9",
+    "maven": "3.10.0",
+    "dockerServer": "28.0.4",
+    "compose": "2.38.2",
+    "mysql": "8.4.11",
+    "broker": "apache/kafka:4.1.1",
+    "springKafka": "3.3.16",
+    "kafkaClient": "3.9.2",
+    "testcontainers": "2.0.5"
+  },
+  "localExecution": {
+    "performed": false,
+    "reason": "Executor unavailable"
+  },
+  "limits": [
+    "Local PLAINTEXT broker, replication factor 1",
+    "No production ACL/TLS or fleet rebalance certification",
+    "No full advisory audit, retention policy, load benchmark or public deployment",
+    "At-least-once delivery, not external exactly-once",
+    "Flyway support warning remains"
+  ]
+}

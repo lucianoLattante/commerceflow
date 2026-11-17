@@ -81,3 +81,60 @@ with scheduling enabled. An oldest batch of persistently failing reservations co
 candidates and needs future operator tooling. Flyway emits a MySQL-version support warning;
 successful migrations here are functional evidence, not vendor certification.
 No real payment, refund, Kafka delivery, Redis, complete advisory audit, benchmark or public deployment is claimed.
+
+## CF-05 messaging checkpoint — 2026-11-16 (Argentina)
+
+Runtime source: `bc5ba33a59bf4a27c26b160313b2c79a0acd17dc`.
+[CI run 43992169237](https://github.com/lucianoLattante/commerceflow/actions/runs/43992169237),
+job 133735252539, completed successfully. Log timestamps are UTC on 2026-11-17.
+
+**82 unit + 95 integration tests**, zero failures/errors/skipped.
+Integration split: 54 OrderFlowIT, 24 CommerceFlowIT, 1 SchemaUpgradeIT and 16 KafkaDeliveryIT.
+
+Executed evidence includes:
+- Atomic transport enqueue rollback with business outbox/order/stock.
+- Actual broker acknowledgement followed by injected DB mark failure; two identical broker records
+  but one inbox/projection effect after lease recovery.
+- Expired-token fencing, abandoned fifth-lease failure and actual unavailable-broker retry exhaustion.
+- Concurrent publisher polling under SKIP LOCKED and concurrent duplicate consumers.
+- Consumer projection rollback, three attempts, durable recovery, repair and exact-payload replay.
+- DLQ capture/transport rollback retaining the original offset, then successful recovery/offset advance.
+- Poison/changed/out-of-order events, source sequence gates, metadata authorization and recovery budgets.
+- V4 backfill after populated V1/V2, preserving identity/catalog/reservation/business-event data.
+- Protocol version validation rejecting string/fractional coercion.
+- Compose config/image build/startup/readiness/catalog and network HTTP lifecycle plus Kafka projections.
+
+Runtime: Ubuntu 24.04, Temurin 21.0.13+9, Maven 3.10.0, Docker server 28.0.4,
+Compose v2.38.2, MySQL 8.4.11, Apache Kafka broker 4.1.1, Spring Kafka 3.3.16,
+Kafka client 3.9.2 and Testcontainers 2.0.5. The Docker builder uses Maven 3.9.11/Java 21.
+No local execution is claimed while the executor is unavailable.
+
+```bash
+java -version
+mvn -version
+docker version
+docker compose version
+mvn -B --no-transfer-progress verify
+docker compose config --quiet
+docker compose up -d --build --wait --wait-timeout 240
+curl --fail --silent --retry 30 --retry-all-errors --retry-delay 2 --max-time 5 http://localhost:8080/actuator/health/readiness
+curl --fail --silent http://localhost:8080/api/products
+python3 scripts/smoke-orders.py
+docker compose down --volumes
+```
+
+Failed attempts remain visible: 43990652562 exposed cross-test Kafka records after DB cleanup;
+43990846934 and 43991702312 exposed an incorrect assumption that each concurrent SKIP LOCKED poll
+must claim work immediately. Test isolation now resets only the inactive test group between cases,
+and the competing publisher test uses bounded polling. Recovery scenarios never reset offsets.
+The production consumer never resets offsets. These failures are not counted as successful.
+
+Run 43991841530 passed 78 unit + 95 integration tests and Compose/HTTP before the final strict
+protocol-version validation. Run 43992169237 verifies that refinement with four additional unit cases.
+Documentation-only commits after this runtime source must preserve all source/tests/migrations,
+workflow, scripts and infrastructure byte-for-byte; the PR records integration state.
+
+Limits: one local PLAINTEXT broker with replication factor 1; no production ACL/TLS, fleet rebalance
+certification, full advisory audit, retention policy, load benchmark or public deployment.
+Flyway's existing MySQL-version support warning remains. Functional migrations are demonstrated;
+vendor certification is not claimed. The CF-04 scheduler-timing and clock limitations still apply.

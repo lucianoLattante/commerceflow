@@ -1,58 +1,52 @@
 # CommerceFlow roadmap
 
-The original Java 21 / Spring Boot modular monolith grows through small, verified feature PRs.
-Implemented functionality is listed below; Kafka and Redis are still planned.
-The distributed-processing MVP is not complete and no production deployment is claimed.
+Original Java 21 / Spring Boot modular monolith with explicit commit boundaries.
+Order creation, simulated lifecycle and durable Kafka projection/recovery are implemented and verified.
+Redis and expanded operability remain planned; no production deployment is claimed.
 
 ## Verified increments
 
-| Increment | Implemented behavior | Execution evidence |
+| Increment | Behavior | Evidence |
 | --- | --- | --- |
-| CF-01 | Identity, opaque bearer auth, explicit admin bootstrap, catalog, money/stock primitives, Flyway, Compose, OpenAPI and metrics | Initial 33 unit + 24 MySQL tests; PR #1 |
-| CF-03 | Owned order snapshots, sorted inventory locks, scoped creation idempotency and transactional outbox | 54 unit + 55 MySQL tests and HTTP smoke; PR #2 |
-| CF-04 | Simulated approval/decline, owner cancellation, 15 minute reservation expiry and terminal-state guards | 65 unit + 78 MySQL tests and expanded Compose HTTP smoke; PR #3 |
+| CF-01 | Identity, catalog, money/stock, Flyway, Compose, errors/OpenAPI/metrics | Initial 33 unit + 24 MySQL tests; PR #1 |
+| CF-03 | Owned snapshots, sorted stock locks, scoped idempotency, atomic outbox | 54 unit + 55 MySQL tests; PR #2 |
+| CF-04 | Simulated payments, cancellation and 15 minute reservation expiry | 65 unit + 78 MySQL tests; PR #3; post-merge CI 43986864165 passed |
+| CF-05 | Leased Kafka dispatch, atomic inbox/projection, durable DLQ and audited recovery | 82 unit + 95 MySQL/Kafka tests; CI 43992169237; PR #4 |
 
-[Exact commands, commits and CI evidence](docs/VERIFICATION.md).
+[Exact source commits, commands and limitations](docs/VERIFICATION.md).
+GitHub PR pages record integration state separately from test success.
 
-## Completed in CF-04
+## Completed CF-05
 
-- [x] Consume or release stock once per reservation through a locked terminal transition.
-- [x] Commit order state, stock, payment digest/outcome and completion outbox in one transaction.
-- [x] Replay an equivalent simulated payment; conflict on changed key/outcome.
-- [x] Repeated cancellation/expiry has no second stock effect.
-- [x] Bound expiry scans to 100 candidates and use independent transactions per order.
-- [x] Preserve released V1/V2 migrations; backfill existing reservations through V3.
-- [x] Execute MySQL races, late-failure rollback/retry and migration tests.
-- [x] Execute Docker Compose startup/readiness and network HTTP lifecycle checks.
-- [x] Document state machine, API contract, tradeoffs, limitations and interview demonstrations.
-- [ ] PR integration state is tracked by GitHub PR #3; do not infer merge state from test results.
+- [x] Immutable business-event bytes plus transport intent in one transaction.
+- [x] Committed leases and token-fenced updates, broker I/O outside DB locks.
+- [x] Explicit source sequence gates and per-order Kafka keys.
+- [x] Broker-ack/DB-mark crash-window test with duplicate records and one inbox effect.
+- [x] Atomic inbox/projection; contiguous sequence and customer consistency.
+- [x] Bounded publisher/consumer retries and abandoned-lease recovery.
+- [x] Durable DLQ capture/transport transaction before recovered offset advancement.
+- [x] ADMIN-only exact-payload replay/retry with hashed keys, budgets and actor audit.
+- [x] Populated upgrade preservation; V1–V3 unchanged and V4 transport backfill.
+- [x] Real MySQL/Kafka failure/concurrency/recovery tests and Compose HTTP projection smoke.
+- [x] Architecture, ADR 5, API contract, limits and interview demonstration.
 
-## Next — CF-05: durable messaging
-
-- [ ] Decide and document Kafka topic/event contracts and publisher acknowledgement boundaries.
-- [ ] Publish pending outbox events with a recoverable claim/retry strategy.
-- [ ] Demonstrate the broker-ack/database-mark crash window and possible duplicate delivery.
-- [ ] Add an idempotent consumer/inbox with its state update in one database transaction.
-- [ ] Bound retries, route exhausted failures to a DLQ and define safe replay.
-- [ ] Use disposable Kafka/MySQL tests for duplicates, recovery and poison messages.
-- [ ] Extend Compose, CI and the technical case study with executed evidence.
-
-## Later — CF-06: operability and security follow-up
+## Next — CF-06: operability and security follow-up
 
 - [ ] Add justified Redis rate limiting/cache with observable fallback behavior.
-- [ ] Add operation audit, lifecycle/outbox metrics and failure demonstrations.
-- [ ] Extend API filters/administration where they support a concrete use case.
-- [ ] Finish the interview case study and reproducible demonstration.
+- [ ] Add operation audit beyond message recovery, lifecycle/outbox metrics and failure demonstrations.
+- [ ] Improve admin metadata queries, operator visibility, retention and poison-backlog handling.
+- [ ] Extend concrete product/identity administration use cases.
+- [ ] Finish the reproducible demonstration and case study.
 
-## Deferred CF-02 identity maintenance
+## Deferred identity maintenance
 
-Registration/login/self-profile/logout and role-aware access are implemented.
-Full user/role administration, email verification/recovery, refresh tokens, token cleanup
-and login throttling remain deferred. There is no claim that the complete identity lifecycle is finished.
+Registration/login/self-profile/logout, explicit admin bootstrap and role-aware access are implemented.
+Full user/role administration, email verification/recovery, refresh tokens, token cleanup and login
+throttling remain deferred. No complete identity-lifecycle claim is made.
 
 ## Known boundaries
 
-Payments are synthetic; no real money, card/bank data, refund or external provider is involved.
-Outbox rows are not yet Kafka delivery. Expiry has no exact timing SLA, and multiple JVMs would
-require synchronized clocks. A complete dependency advisory audit, production load benchmark
-and public deployment remain outside the executed evidence.
+Payments are synthetic. No real money/provider/refund, production Kafka ACL/TLS, multi-broker
+resilience, complete dependency advisory audit, load benchmark or public deployment is verified.
+At-least-once messaging relies on inbox deduplication; no external exactly-once guarantee is claimed.
+Expiry has no exact timing SLA, and leases require synchronized clocks across publisher instances.

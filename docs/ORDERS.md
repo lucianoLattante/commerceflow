@@ -1,6 +1,6 @@
 # Order creation and reservation
 
-Creation is implemented. The subsequent [lifecycle contract](LIFECYCLE.md) covers simulated payment, cancellation and expiry; Kafka delivery remains pending.
+Creation is implemented. The subsequent [lifecycle contract](LIFECYCLE.md) covers simulated payment, cancellation and expiry; [CF-05](MESSAGING.md) adds Kafka delivery; its actual execution evidence is recorded separately.
 
 ## API
 
@@ -59,7 +59,7 @@ All application participants run in one JVM and use one database transaction. Th
 
 ## Event storage
 
-outbox_events stores an event ID, order ID, type, version, JSON payload, occurrence time and null published_at. Creation emits ORDER_RESERVED version 1; [lifecycle completions](LIFECYCLE.md) add their own version-1 event types. It is durable and atomic with the order. There is no background publisher or Kafka delivery yet; a pending row is not a delivered message.
+outbox_events stores an event ID, order ID, type, version, JSON payload, occurrence time and null published_at. Creation emits ORDER_RESERVED version 1; [lifecycle completions](LIFECYCLE.md) add their own version-1 event types. It is durable and atomic with the order. [CF-05](MESSAGING.md) adds a leased publisher. A pending row still does not prove delivery; a broker acknowledgement does not prove consumer application.
 
 ## Verification design
 
@@ -75,4 +75,4 @@ Local unit tests and compilation are recorded separately from MySQL/container ex
 
 Reservations now finish through [simulated payment, cancellation or expiry](LIFECYCLE.md). Those transitions are local and transactional; this remains a staged portfolio implementation.
 
-No outbox publisher, Kafka, inbox deduplication, retry/DLQ mechanism, Redis, real payment or public deployment is implemented. Idempotency persistence and stock locks solve creation-side effects; they do not establish exactly-once messaging.
+CF-05 implements the publisher, Kafka, inbox and retry/DLQ mechanism. Redis, real payment and public deployment remain unimplemented. Idempotency persistence and stock locks solve creation-side effects; they do not establish exactly-once messaging.

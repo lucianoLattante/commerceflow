@@ -18,7 +18,7 @@ flowchart TD
   Outbox --> DB
 ```
 
-All modules run in one JVM with one database and transaction manager. The inventory interface is implemented within catalog persistence. Repositories/entities remain package-private where practical. No Kafka publisher or network call between modules exists yet.
+All modules run in one JVM with one database and transaction manager. The inventory interface is implemented within catalog persistence. Repositories/entities remain package-private where practical. [CF-05 messaging](MESSAGING.md) adds a leased Kafka publisher and an asynchronous projection consumer. Broker I/O runs outside the order transaction. Inbox and projection commit together; no consumer changes authoritative stock or order state.
 
 | Record | Persisted contract |
 | --- | --- |
@@ -50,4 +50,11 @@ SchemaUpgradeIT populates V1 identity/catalog, applies V2 and creates an existin
 
 ## Current limits
 
-The local simulated lifecycle is implemented; see [LIFECYCLE.md](LIFECYCLE.md). No real payment provider/refunds, Kafka publisher/consumer, Redis, complete audit trail, load benchmark or public deployment is claimed. Expiry scans are bounded and have no exact timing SLA.
+The local simulated lifecycle is implemented; see [LIFECYCLE.md](LIFECYCLE.md). Kafka publisher/consumer and operator recovery audit are implemented in CF-05. No real provider/refunds, Redis, complete audit trail, benchmark or public deployment is claimed. Expiry scans are bounded and have no exact timing SLA.
+
+## Messaging persistence
+V4 preserves V1–V3 and backfills message_dispatch from business outbox rows.
+message_dispatch stores immutable bytes, fenced leases and bounded retries. message_inbox deduplicates
+within the projection transaction. message_dead_letters and message_operator_requests retain durable
+recovery and idempotent actor-attributed operator actions. [ADR 5](adr/0005-durable-kafka.md) describes
+acknowledgement boundaries and tradeoffs; the messaging diagram describes the implemented flow.
