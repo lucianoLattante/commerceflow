@@ -21,6 +21,17 @@ public class JdbcOrderOutbox implements OrderEventSink {
   @Override
   @Transactional(propagation = Propagation.MANDATORY)
   public void orderReserved(ReservedOrder event) {
+    append(event.eventId(), event.orderId(), "ORDER_RESERVED", event, event.occurredAt());
+  }
+
+  @Override
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void orderCompleted(CompletedOrder event) {
+    append(event.eventId(), event.orderId(), event.type(), event, event.occurredAt());
+  }
+
+  private void append(java.util.UUID id, String orderId, String type, Object event,
+      java.time.Instant occurredAt) {
     String payload;
     try {
       payload = json.writeValueAsString(event);
@@ -30,11 +41,12 @@ public class JdbcOrderOutbox implements OrderEventSink {
     jdbc.update(
         """
         INSERT INTO outbox_events(id,order_id,event_type,event_version,payload,occurred_at)
-        VALUES(?,?,'ORDER_RESERVED',1,?,?)
+        VALUES(?,?,?,1,?,?)
         """,
-        event.eventId().toString(),
-        event.orderId(),
+        id.toString(),
+        orderId,
+        type,
         payload,
-        Timestamp.from(event.occurredAt()));
+        Timestamp.from(occurredAt));
   }
 }

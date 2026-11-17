@@ -46,7 +46,7 @@ public class OrderService {
       BigDecimal total,
       Money.Currency currency,
       List<ItemView> items,
-      Instant createdAt) {}
+      Instant createdAt, Instant expiresAt, Instant completedAt) {}
 
   public record Creation(OrderView order, boolean replayed) {}
 
@@ -55,7 +55,7 @@ public class OrderService {
       OrderStatus status,
       BigDecimal total,
       Money.Currency currency,
-      Instant createdAt) {}
+      Instant createdAt, Instant expiresAt, Instant completedAt) {}
 
   public record OrderPage(List<Summary> content, int page, int size, long totalElements) {}
 
@@ -96,7 +96,7 @@ public class OrderService {
             : orders.findByCustomerIdAndStatus(actor.id(), status, pageable);
     return new OrderPage(
         result.getContent().stream()
-            .map(o -> new Summary(o.id(), o.status(), o.total(), o.currency(), o.createdAt()))
+            .map(o -> new Summary(o.id(), o.status(), o.total(), o.currency(), o.createdAt(), o.expiresAt(), o.completedAt()))
             .toList(),
         page,
         size,
@@ -110,7 +110,7 @@ public class OrderService {
     return order;
   }
 
-  private static OrderView view(PurchaseOrder order) {
+  static OrderView view(PurchaseOrder order) {
     return new OrderView(
         order.id(),
         order.customerId(),
@@ -118,6 +118,6 @@ public class OrderService {
         order.total(),
         order.currency(),
         order.itemViews(),
-        order.createdAt());
+        order.createdAt(), order.expiresAt(), order.completedAt());
   }
 }

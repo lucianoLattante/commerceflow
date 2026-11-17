@@ -26,7 +26,13 @@ public class ApiErrors {
     return problem(
         HttpStatus.CONFLICT,
         "idempotency_conflict",
-        "Idempotency-Key was already used for a different order request");
+        "Idempotency-Key was already used for a different request");
+  }
+
+  @ExceptionHandler(dev.lattante.commerceflow.orders.OrderStateConflict.class)
+  ProblemDetail orderState() {
+    return problem(HttpStatus.CONFLICT, "order_state_conflict",
+        "Operation is incompatible with the current order state");
   }
 
   @ExceptionHandler(org.springframework.dao.TransientDataAccessException.class)

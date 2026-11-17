@@ -69,7 +69,7 @@ class SecurityConfiguration {
                     .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.GET, "/actuator/prometheus")
                     .hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.POST, "/api/orders")
+                    .requestMatchers(HttpMethod.POST, "/api/orders", "/api/orders/*/simulated-payment", "/api/orders/*/cancel")
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/orders", "/api/orders/*")
                     .authenticated()

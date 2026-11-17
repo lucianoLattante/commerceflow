@@ -16,8 +16,10 @@ import org.springframework.web.bind.annotation.*;
 @SecurityRequirement(name = "bearerAuth")
 class OrderController {
   private final OrderService orders;
+  private final OrderLifecycleService lifecycle;
 
-  OrderController(OrderService orders) {
+  OrderController(OrderService orders, OrderLifecycleService lifecycle) {
+    this.lifecycle = lifecycle;
     this.orders = orders;
   }
 
@@ -38,6 +40,24 @@ class OrderController {
         .location(URI.create("/api/orders/" + result.order().id()))
         .header("Idempotency-Replayed", Boolean.toString(result.replayed()))
         .body(result.order());
+  }
+
+  record SimulatedPayment(@NotNull PaymentDecision decision) {}
+
+  @PostMapping("/{id}/simulated-payment")
+  ResponseEntity<OrderService.OrderView> pay(
+      @PathVariable UUID id, @AuthenticationPrincipal Actor actor,
+      @RequestHeader("Idempotency-Key") String key,
+      @Valid @RequestBody SimulatedPayment input) {
+    var result = lifecycle.pay(id.toString(), actor, key, input.decision());
+    return ResponseEntity.ok()
+        .header("Idempotency-Replayed", Boolean.toString(result.replayed()))
+        .body(result.order());
+  }
+
+  @PostMapping("/{id}/cancel")
+  OrderService.OrderView cancel(@PathVariable UUID id, @AuthenticationPrincipal Actor actor) {
+    return lifecycle.cancel(id.toString(), actor);
   }
 
   @GetMapping("/{id}")

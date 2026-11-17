@@ -25,3 +25,12 @@ The order-processing MVP is not complete in the first catalog increment. Kafka/R
 - [x] 54 unit tests passed locally; integration suite compiles.
 - [x] CI run 43932466541 passed: 54 unit + 55 MySQL integration tests, upgrade preservation, late-failure rollback and real HTTP smoke.
 - [x] Prepared for integration after verification; PR #2 records the merge state. Payment/expiry transitions and Kafka delivery remain pending.
+
+## CF-04 — order lifecycle
+- [x] Implement simulated approval/decline, cancellation and a creation-based 15 minute lease.
+- [x] Lock the order before stock; atomically commit terminal state, stock and completion outbox event.
+- [x] Digest-only order-scoped payment keys; deterministic replay and conflict handling.
+- [x] Bounded expiry scan; independent transaction per order and retry on later scans.
+- [x] Additive V3 migration preserving V1/V2 and upgrading existing reservations.
+- [ ] Execute lifecycle unit, MySQL rollback/concurrency/upgrade tests and Compose HTTP smoke.
+- [ ] Integrate only after reviewing actual CI evidence.
