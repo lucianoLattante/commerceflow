@@ -206,3 +206,62 @@ Order audit starts with V5 without fabricated history. Gauges are non-atomic obs
 counters reset on restart. Redis TLS/ACL/HA, complete abuse defense, retention, complete identity/product
 administration, full advisory audit, load capacity and public deployment remain unverified.
 The existing Flyway MySQL-support warning and CF-04/05 clock/security limitations are not closed.
+
+## Catalog administration — 2026-11-17
+
+Verified runtime source: `d4fa34cb5cc04c5770b6b7462a2dbe37b7d1a675`.
+[CI 44089250548](https://github.com/lucianoLattante/commerceflow/actions/runs/44089250548),
+job 134059754197, completed successfully.
+
+- 99 unit tests, zero failures/errors/skipped.
+- 123 integration tests: OrderFlowIT 73, CommerceFlowIT 24, SchemaUpgradeIT 1,
+  KafkaDeliveryIT 16 and RedisGuardIT 9; zero failures/errors/skipped.
+- Compose configuration, image build/startup, readiness/public catalog, order lifecycle, Kafka
+  projections, catalog administration, audit and Redis admission network HTTP smoke all passed.
+- V1-V5 migration blobs are unchanged. The populated upgrade preserves stock/reservations/version
+  and activates existing products with V6's default. No public deployment.
+
+New MySQL cases exercised two competing administrators, reservation/deactivation and payment/stock
+races, partial-basket rollback, old order snapshots/payment and cancellation of inactive reservations,
+stale/no-op requests, transactional audit-insert failure and rollback of fields/version,
+role boundaries, required DTO fields, ignored forged fields, discovery/pagination and audit order.
+
+CI runtime: Ubuntu 24.04, Temurin 21.0.13+9, Maven 3.10.0, Docker server 28.0.4,
+Compose v2.38.2. Existing Testcontainers 2.0.5 and dependencies were unchanged.
+Exact workflow commands:
+
+```bash
+java -version
+mvn -version
+docker version
+docker compose version
+mvn -B --no-transfer-progress verify
+docker compose config --quiet
+docker compose up -d --build --wait --wait-timeout 240
+curl --fail --silent --retry 30 --retry-all-errors --retry-delay 2 --max-time 5 http://localhost:8080/actuator/health/readiness
+curl --fail --silent http://localhost:8080/api/products
+python3 scripts/smoke-orders.py
+docker compose down --volumes
+```
+
+Local Windows: Oracle JDK 21.0.7 / Maven 3.9.0. Two executions of 99 unit tests passed;
+integration sources compiled, not executed locally because no Docker daemon was available.
+Maven's Java/Plexus launcher used `-B --no-transfer-progress -Dmaven.repo.local=C:/workspace/maven-commerceflow test`;
+its full launcher arguments are in the private verification record. The second run includes
+the final payment/basket scenarios. Markdown local targets and Python AST validation passed;
+these static checks are not runtime tests. No failed CI run occurred in this increment.
+
+The previous source copies remain preserved. A fresh plain source copy was compared with all 116
+upstream branch blobs; it is not represented as a local Git clone/history. Connector operations used
+the real feature branch and commit ancestry. Before publication, a limited credential-pattern check
+and manual review of changed source found no embedded live credentials; this is not a full advisory
+or history scan.
+
+Follow-up documentation commits must preserve every runtime/test/migration/script/workflow/
+infrastructure blob from the verified source. PR #6 records integration separately from test success.
+
+Limits: revision conflicts require manual re-read/reconciliation; no automatic merge or
+idempotent-response replay. Product audit starts with V6 administrative edits, excludes creation
+and routine order stock movements, and is append-only through the API rather than tamper-proof
+against database operators. No warehouse ledger, user administration, retention, full advisory audit,
+load capacity or production deployment was verified.

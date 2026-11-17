@@ -20,4 +20,4 @@ El nuevo incremento permite editar, desactivar/reactivar y reconciliar existenci
 bloqueo compartido con las reservas y auditoría en la misma transacción. Conserva precios de órdenes ya
 creadas y permite finalizar sus reservas aunque el producto esté inactivo. El [contrato de API](docs/CATALOG_ADMINISTRATION.md)
 explica los conflictos y reintentos; no se presenta como administración de usuarios ni libro de inventario.
-Estado de verificación del incremento: pruebas locales ejecutadas; integración y Compose pendientes de CI.
+Verificación: 99 pruebas unitarias locales y CI 44089250548 con 99 unitarias + 123 de integración MySQL/Kafka/Redis, sin fallos, errores ni omisiones. Docker Compose y el flujo HTTP de administración también pasaron. La evidencia exacta está en [VERIFICATION.md](docs/VERIFICATION.md).
