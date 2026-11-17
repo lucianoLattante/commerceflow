@@ -93,3 +93,32 @@ for order_id, terminal in ((created["id"], "PAID"), (second["id"], "CANCELLED"),
 call("GET", "/api/admin/messaging/dead-letters", token=access, expected=403)
 assert call("GET", "/api/admin/messaging/failures", token=admin) == []
 print("Kafka HTTP smoke passed: paid, cancelled and declined projections reached sequence 2.")
+
+
+# Audit is the durable history; verify one reservation and one terminal entry.
+for order_id in (created["id"], second["id"], third["id"]):
+    history = call("GET", "/api/orders/" + order_id + "/audit", token=access)
+    assert [entry["sequence"] for entry in history] == [1, 2]
+    assert all("password" not in entry and "token" not in entry for entry in history)
+call("GET", "/api/admin/operations/audit", token=access, expected=403)
+
+# Compose enables admission. Existing smoke logins share this loopback socket budget.
+limited = False
+for attempt in range(6):
+    payload = json.dumps({"email": "missing-rate-fixture@example.test",
+                          "password": "wrong-rate-test-fixture"}).encode()
+    req = request.Request(BASE + "/api/auth/token", data=payload,
+                          headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        request.urlopen(req, timeout=15).close()
+        raise RuntimeError("Invalid fixture credentials unexpectedly authenticated")
+    except error.HTTPError as response:
+        if response.code == 429:
+            assert int(response.headers["Retry-After"]) >= 1
+            assert json.loads(response.read())["code"] == "rate_limited"
+            limited = True
+            break
+        assert response.code == 401
+assert limited
+assert call("GET", "/api/products/" + product["id"])["available"] == 3
+print("Operability HTTP smoke passed: audit, authorization and Redis-backed admission.")

@@ -22,7 +22,14 @@ import org.springframework.test.web.servlet.*;
 import org.testcontainers.junit.jupiter.*;
 import org.testcontainers.mysql.MySQLContainer;
 
-@SpringBootTest(properties = {"CF_BOOTSTRAP_ADMIN_EMAIL=", "CF_BOOTSTRAP_ADMIN_PASSWORD=", "commerceflow.reservations.scheduling-enabled=false"})
+@SpringBootTest(
+    properties = {
+      "CF_BOOTSTRAP_ADMIN_EMAIL=",
+      "CF_BOOTSTRAP_ADMIN_PASSWORD=",
+      "commerceflow.reservations.scheduling-enabled=false"
+    })
+@org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability(
+    tracing = false)
 @AutoConfigureMockMvc
 @Testcontainers
 class OrderFlowIT {
@@ -48,9 +55,12 @@ class OrderFlowIT {
   @Autowired ObjectMapper json;
   @Autowired JdbcTemplate jdbc;
   @Autowired IdentityService identity;
+  @Autowired io.micrometer.core.instrument.MeterRegistry transitionMetrics;
   @Autowired dev.lattante.commerceflow.orders.OrderLifecycleService lifecycle;
+
   @org.springframework.test.context.bean.override.mockito.MockitoBean
   java.time.Clock lifecycleClock;
+
   private String admin;
   private Customer owner;
 
@@ -64,8 +74,10 @@ class OrderFlowIT {
         .thenReturn(java.time.Instant.parse("2026-01-01T00:00:00.123456789Z"));
     jdbc.execute("DROP TRIGGER IF EXISTS reject_outbox");
     jdbc.execute("DROP TRIGGER IF EXISTS reject_dispatch");
+    jdbc.execute("DROP TRIGGER IF EXISTS reject_audit");
     for (String table :
         List.of(
+            "order_operation_audit",
             "message_operator_requests",
             "message_dead_letters",
             "message_inbox",
@@ -565,28 +577,36 @@ class OrderFlowIT {
 
   private String newOrder(String product, int quantity) throws Exception {
     return reply(owner.token(), "create-" + UUID.randomUUID(), items(product, quantity))
-        .body().get("id").asText();
+        .body()
+        .get("id")
+        .asText();
   }
 
-  private ResultActions payment(String access, String order, String key, String decision) throws Exception {
-    return mvc.perform(post("/api/orders/" + order + "/simulated-payment")
-        .header("Authorization", "Bearer " + access).header("Idempotency-Key", key)
-        .contentType(MediaType.APPLICATION_JSON).content(body(Map.of("decision", decision))));
+  private ResultActions payment(String access, String order, String key, String decision)
+      throws Exception {
+    return mvc.perform(
+        post("/api/orders/" + order + "/simulated-payment")
+            .header("Authorization", "Bearer " + access)
+            .header("Idempotency-Key", key)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(body(Map.of("decision", decision))));
   }
 
   private ResultActions cancel(String access, String order) throws Exception {
-    return mvc.perform(post("/api/orders/" + order + "/cancel")
-        .header("Authorization", "Bearer " + access));
+    return mvc.perform(
+        post("/api/orders/" + order + "/cancel").header("Authorization", "Bearer " + access));
   }
 
   private void stockIs(String product, int onHand, int reserved) {
-    assertThat(jdbc.queryForObject("SELECT on_hand FROM products WHERE id=?", Integer.class, product))
+    assertThat(
+            jdbc.queryForObject("SELECT on_hand FROM products WHERE id=?", Integer.class, product))
         .isEqualTo(onHand);
     assertThat(reserved(product)).isEqualTo(reserved);
   }
 
   private String state(String order) {
-    return jdbc.queryForObject("SELECT status FROM customer_orders WHERE id=?", String.class, order);
+    return jdbc.queryForObject(
+        "SELECT status FROM customer_orders WHERE id=?", String.class, order);
   }
 
   private void dueNow(String order) {
@@ -594,30 +614,45 @@ class OrderFlowIT {
   }
 
   private dev.lattante.commerceflow.identity.Actor ownerActor() {
-    return new dev.lattante.commerceflow.identity.Actor(owner.id(), "customer@example.test",
+    return new dev.lattante.commerceflow.identity.Actor(
+        owner.id(),
+        "customer@example.test",
         dev.lattante.commerceflow.identity.AppUser.Role.CUSTOMER);
   }
 
   @Test
   void approvedPaymentConsumesStockOnceAndPersistsOnlyKeyDigest() throws Exception {
     String product = product("A", 10), order = newOrder(product, 2);
-    var paid = payment(owner.token(), order, "payment-key-01", "APPROVED")
-        .andExpect(status().isOk()).andExpect(header().string("Idempotency-Replayed", "false"))
-        .andExpect(jsonPath("$.status").value("PAID")).andReturn().getResponse().getContentAsString();
+    var paid =
+        payment(owner.token(), order, "payment-key-01", "APPROVED")
+            .andExpect(status().isOk())
+            .andExpect(header().string("Idempotency-Replayed", "false"))
+            .andExpect(jsonPath("$.status").value("PAID"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
     stockIs(product, 8, 0);
     payment(owner.token(), order, "payment-key-01", "APPROVED")
-        .andExpect(status().isOk()).andExpect(header().string("Idempotency-Replayed", "true"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Idempotency-Replayed", "true"))
         .andExpect(content().json(paid));
     stockIs(product, 8, 0);
     assertThat(count("outbox_events")).isEqualTo(2);
     assertThat(jdbc.queryForObject("SELECT payment_key_hash FROM customer_orders", String.class))
-        .matches("[0-9a-f]{64}").isNotEqualTo("payment-key-01");
-    assertThat(jdbc.queryForObject(
-        "SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status')) FROM outbox_events WHERE event_type='ORDER_PAID'",
-        String.class)).isEqualTo("PAID");
-    assertThat(jdbc.queryForObject(
-        "SELECT JSON_CONTAINS_PATH(payload,'one','$.paymentKeyHash') FROM outbox_events WHERE event_type='ORDER_PAID'",
-        Integer.class)).isZero();
+        .matches("[0-9a-f]{64}")
+        .isNotEqualTo("payment-key-01");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status')) FROM outbox_events WHERE"
+                    + " event_type='ORDER_PAID'",
+                String.class))
+        .isEqualTo("PAID");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT JSON_CONTAINS_PATH(payload,'one','$.paymentKeyHash') FROM outbox_events"
+                    + " WHERE event_type='ORDER_PAID'",
+                Integer.class))
+        .isZero();
   }
 
   @Test
@@ -625,9 +660,11 @@ class OrderFlowIT {
     String product = product("A", 10), order = newOrder(product, 2);
     payment(owner.token(), order, "payment-key-01", "APPROVED").andExpect(status().isOk());
     payment(owner.token(), order, "payment-key-01", "DECLINED")
-        .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("idempotency_conflict"));
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("idempotency_conflict"));
     payment(owner.token(), order, "different-key", "APPROVED").andExpect(status().isConflict());
-    cancel(owner.token(), order).andExpect(status().isConflict())
+    cancel(owner.token(), order)
+        .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("order_state_conflict"));
     stockIs(product, 8, 0);
     assertThat(count("outbox_events")).isEqualTo(2);
@@ -637,9 +674,11 @@ class OrderFlowIT {
   void declinedPaymentReleasesStockAndIsTerminal() throws Exception {
     String product = product("A", 10), order = newOrder(product, 3);
     payment(owner.token(), order, "declined-key", "DECLINED")
-        .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PAYMENT_DECLINED"));
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("PAYMENT_DECLINED"));
     payment(owner.token(), order, "declined-key", "DECLINED")
-        .andExpect(status().isOk()).andExpect(header().string("Idempotency-Replayed", "true"));
+        .andExpect(status().isOk())
+        .andExpect(header().string("Idempotency-Replayed", "true"));
     cancel(owner.token(), order).andExpect(status().isConflict());
     stockIs(product, 10, 0);
     assertThat(count("outbox_events")).isEqualTo(2);
@@ -649,8 +688,10 @@ class OrderFlowIT {
   @Test
   void cancellationIsIdempotentAndDoesNotPermitPaymentAfterwards() throws Exception {
     String product = product("A", 10), order = newOrder(product, 2);
-    for (int i=0; i<3; i++) cancel(owner.token(), order)
-        .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
+    for (int i = 0; i < 3; i++)
+      cancel(owner.token(), order)
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("CANCELLED"));
     payment(owner.token(), order, "payment-key-01", "APPROVED").andExpect(status().isConflict());
     stockIs(product, 10, 0);
     assertThat(count("outbox_events")).isEqualTo(2);
@@ -659,7 +700,8 @@ class OrderFlowIT {
   @Test
   void paymentKeysAreScopedToTheOrderAndCreationKeysDoNotCollide() throws Exception {
     String product = product("A", 10);
-    String first = reply(owner.token(), "shared-key-01", items(product, 1)).body().get("id").asText();
+    String first =
+        reply(owner.token(), "shared-key-01", items(product, 1)).body().get("id").asText();
     String second = newOrder(product, 2);
     payment(owner.token(), first, "shared-key-01", "APPROVED").andExpect(status().isOk());
     payment(owner.token(), second, "shared-key-01", "DECLINED").andExpect(status().isOk());
@@ -684,9 +726,12 @@ class OrderFlowIT {
   void anonymousLifecycleOperationsAreRejected() throws Exception {
     String product = product("A", 10), order = newOrder(product, 2);
     mvc.perform(post("/api/orders/" + order + "/cancel")).andExpect(status().isUnauthorized());
-    mvc.perform(post("/api/orders/" + order + "/simulated-payment")
-        .header("Idempotency-Key", "payment-key-01").contentType(MediaType.APPLICATION_JSON)
-        .content("{\"decision\":\"APPROVED\"}")).andExpect(status().isUnauthorized());
+    mvc.perform(
+            post("/api/orders/" + order + "/simulated-payment")
+                .header("Idempotency-Key", "payment-key-01")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"decision\":\"APPROVED\"}"))
+        .andExpect(status().isUnauthorized());
     stockIs(product, 10, 2);
     assertThat(count("outbox_events")).isEqualTo(1);
   }
@@ -695,14 +740,21 @@ class OrderFlowIT {
   void malformedPaymentRequestsNeverChangeTheReservation() throws Exception {
     String product = product("A", 10), order = newOrder(product, 2);
     for (String payload : List.of("{}", "{\"decision\":null}", "{\"decision\":\"REAL_CHARGE\"}")) {
-      mvc.perform(post("/api/orders/" + order + "/simulated-payment")
-          .header("Authorization", "Bearer " + owner.token()).header("Idempotency-Key", "payment-key")
-          .contentType(MediaType.APPLICATION_JSON).content(payload)).andExpect(status().isBadRequest());
+      mvc.perform(
+              post("/api/orders/" + order + "/simulated-payment")
+                  .header("Authorization", "Bearer " + owner.token())
+                  .header("Idempotency-Key", "payment-key")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(payload))
+          .andExpect(status().isBadRequest());
     }
     payment(owner.token(), order, "short", "APPROVED").andExpect(status().isBadRequest());
-    mvc.perform(post("/api/orders/" + order + "/simulated-payment")
-        .header("Authorization", "Bearer " + owner.token()).contentType(MediaType.APPLICATION_JSON)
-        .content("{\"decision\":\"APPROVED\"}")).andExpect(status().isBadRequest());
+    mvc.perform(
+            post("/api/orders/" + order + "/simulated-payment")
+                .header("Authorization", "Bearer " + owner.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"decision\":\"APPROVED\"}"))
+        .andExpect(status().isBadRequest());
     stockIs(product, 10, 2);
     assertThat(count("outbox_events")).isEqualTo(1);
   }
@@ -712,14 +764,21 @@ class OrderFlowIT {
     String product = product("A", 10), order = newOrder(product, 2);
     dueNow(order);
     payment(owner.token(), order, "payment-key-01", "APPROVED")
-        .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("EXPIRED"));
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("EXPIRED"));
     payment(owner.token(), order, "payment-key-01", "APPROVED")
-        .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("EXPIRED"));
-    cancel(owner.token(), order).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("EXPIRED"));
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("EXPIRED"));
+    cancel(owner.token(), order)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("EXPIRED"));
     assertThat(lifecycle.expire(order)).isFalse();
     stockIs(product, 10, 0);
     assertThat(state(order)).isEqualTo("EXPIRED");
-    assertThat(jdbc.queryForObject("SELECT payment_key_hash IS NULL FROM customer_orders", Boolean.class)).isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT payment_key_hash IS NULL FROM customer_orders", Boolean.class))
+        .isTrue();
     assertThat(count("outbox_events")).isEqualTo(2);
   }
 
@@ -729,7 +788,9 @@ class OrderFlowIT {
     assertThat(lifecycle.expire(order)).isFalse();
     stockIs(product, 10, 2);
     dueNow(order);
-    cancel(owner.token(), order).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("EXPIRED"));
+    cancel(owner.token(), order)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("EXPIRED"));
     assertThat(lifecycle.expire(UUID.randomUUID().toString())).isFalse();
     stockIs(product, 10, 0);
     assertThat(count("outbox_events")).isEqualTo(2);
@@ -740,17 +801,28 @@ class OrderFlowIT {
   void lateOutboxFailureRollsBackLifecycleAndCanBeRetried(String operation) throws Exception {
     String product = product("A", 10), order = newOrder(product, 2);
     if (operation.equals("EXPIRE")) dueNow(order);
-    jdbc.execute("CREATE TRIGGER reject_outbox BEFORE INSERT ON outbox_events FOR EACH ROW"
-        + " SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected test failure'");
+    jdbc.execute(
+        "CREATE TRIGGER reject_outbox BEFORE INSERT ON outbox_events FOR EACH ROW"
+            + " SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected test failure'");
     try {
-      if (operation.equals("EXPIRE")) assertThatThrownBy(() -> lifecycle.expire(order)).isInstanceOf(RuntimeException.class);
-      else if (operation.equals("CANCEL")) cancel(owner.token(), order).andExpect(status().isInternalServerError());
-      else payment(owner.token(), order, "rollback-key", operation).andExpect(status().isInternalServerError());
+      if (operation.equals("EXPIRE"))
+        assertThatThrownBy(() -> lifecycle.expire(order)).isInstanceOf(RuntimeException.class);
+      else if (operation.equals("CANCEL"))
+        cancel(owner.token(), order).andExpect(status().isInternalServerError());
+      else
+        payment(owner.token(), order, "rollback-key", operation)
+            .andExpect(status().isInternalServerError());
       assertThat(state(order)).isEqualTo("RESERVED");
       stockIs(product, 10, 2);
-      assertThat(jdbc.queryForObject("SELECT payment_key_hash IS NULL AND completed_at IS NULL FROM customer_orders", Boolean.class)).isTrue();
+      assertThat(
+              jdbc.queryForObject(
+                  "SELECT payment_key_hash IS NULL AND completed_at IS NULL FROM customer_orders",
+                  Boolean.class))
+          .isTrue();
       assertThat(count("outbox_events")).isEqualTo(1);
-    } finally { jdbc.execute("DROP TRIGGER reject_outbox"); }
+    } finally {
+      jdbc.execute("DROP TRIGGER reject_outbox");
+    }
     if (operation.equals("EXPIRE")) assertThat(lifecycle.expire(order)).isTrue();
     else if (operation.equals("CANCEL")) cancel(owner.token(), order).andExpect(status().isOk());
     else payment(owner.token(), order, "rollback-key", operation).andExpect(status().isOk());
@@ -761,11 +833,18 @@ class OrderFlowIT {
   @Test
   void simultaneousPaymentRetriesConsumeOnlyOnce() throws Exception {
     String product = product("A", 10), order = newOrder(product, 2);
-    var results = concurrently(12, i -> {
-      var r = lifecycle.pay(order, ownerActor(), "concurrent-pay-key",
-          dev.lattante.commerceflow.orders.PaymentDecision.APPROVED);
-      return new Reply(200, json.valueToTree(r.order()), Boolean.toString(r.replayed()));
-    });
+    var results =
+        concurrently(
+            12,
+            i -> {
+              var r =
+                  lifecycle.pay(
+                      order,
+                      ownerActor(),
+                      "concurrent-pay-key",
+                      dev.lattante.commerceflow.orders.PaymentDecision.APPROVED);
+              return new Reply(200, json.valueToTree(r.order()), Boolean.toString(r.replayed()));
+            });
     assertThat(results.stream().filter(r -> r.replayed().equals("false")).count()).isEqualTo(1);
     assertThat(results).allMatch(r -> r.body().get("status").asText().equals("PAID"));
     stockIs(product, 8, 0);
@@ -775,20 +854,34 @@ class OrderFlowIT {
   @Test
   void paymentVersusCancellationHasOneTerminalWinner() throws Exception {
     String product = product("A", 10), order = newOrder(product, 2);
-    var results = concurrently(16, i -> {
-      try {
-        var r = i % 2 == 0
-            ? lifecycle.pay(order, ownerActor(), "race-payment-key",
-                dev.lattante.commerceflow.orders.PaymentDecision.APPROVED).order()
-            : lifecycle.cancel(order, ownerActor());
-        return new Reply(200, json.valueToTree(r), null);
-      } catch (dev.lattante.commerceflow.orders.OrderStateConflict conflict) {
-        return new Reply(409, null, null);
-      }
-    });
+    var results =
+        concurrently(
+            16,
+            i -> {
+              try {
+                var r =
+                    i % 2 == 0
+                        ? lifecycle
+                            .pay(
+                                order,
+                                ownerActor(),
+                                "race-payment-key",
+                                dev.lattante.commerceflow.orders.PaymentDecision.APPROVED)
+                            .order()
+                        : lifecycle.cancel(order, ownerActor());
+                return new Reply(200, json.valueToTree(r), null);
+              } catch (dev.lattante.commerceflow.orders.OrderStateConflict conflict) {
+                return new Reply(409, null, null);
+              }
+            });
     assertThat(results).allMatch(r -> r.status() == 200 || r.status() == 409);
-    assertThat(results.stream().filter(r -> r.status() == 200)
-        .map(r -> r.body().get("status").asText()).distinct().count()).isEqualTo(1);
+    assertThat(
+            results.stream()
+                .filter(r -> r.status() == 200)
+                .map(r -> r.body().get("status").asText())
+                .distinct()
+                .count())
+        .isEqualTo(1);
     String winner = state(order);
     assertThat(winner).isIn("PAID", "CANCELLED");
     stockIs(product, winner.equals("PAID") ? 8 : 10, 0);
@@ -799,12 +892,18 @@ class OrderFlowIT {
   void duePaymentVersusMultipleExpiryWorkersReleasesOnlyOnce() throws Exception {
     String product = product("A", 10), order = newOrder(product, 2);
     dueNow(order);
-    concurrently(16, i -> {
-      if (i % 2 == 0) lifecycle.pay(order, ownerActor(), "expiry-race-key",
-          dev.lattante.commerceflow.orders.PaymentDecision.APPROVED);
-      else lifecycle.expire(order);
-      return new Reply(200, null, null);
-    });
+    concurrently(
+        16,
+        i -> {
+          if (i % 2 == 0)
+            lifecycle.pay(
+                order,
+                ownerActor(),
+                "expiry-race-key",
+                dev.lattante.commerceflow.orders.PaymentDecision.APPROVED);
+          else lifecycle.expire(order);
+          return new Reply(200, null, null);
+        });
     assertThat(state(order)).isEqualTo("EXPIRED");
     stockIs(product, 10, 0);
     assertThat(count("outbox_events")).isEqualTo(2);
@@ -817,8 +916,15 @@ class OrderFlowIT {
     org.mockito.Mockito.when(lifecycleClock.instant())
         .thenReturn(java.time.Instant.parse("2026-01-01T01:00:00Z"));
     assertThat(lifecycle.expire(order)).isFalse();
-    assertThat(lifecycle.pay(order, ownerActor(), "payment-key-01",
-        dev.lattante.commerceflow.orders.PaymentDecision.APPROVED).replayed()).isTrue();
+    assertThat(
+            lifecycle
+                .pay(
+                    order,
+                    ownerActor(),
+                    "payment-key-01",
+                    dev.lattante.commerceflow.orders.PaymentDecision.APPROVED)
+                .replayed())
+        .isTrue();
     stockIs(product, 8, 0);
     assertThat(count("outbox_events")).isEqualTo(2);
   }
@@ -826,36 +932,51 @@ class OrderFlowIT {
   @Test
   void databaseRejectsTerminalStatesWithoutMatchingPaymentMetadata() throws Exception {
     String product = product("A", 10), order = newOrder(product, 2);
-    assertThatThrownBy(() -> jdbc.update("UPDATE customer_orders SET status='PAID',completed_at=created_at WHERE id=?", order))
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE customer_orders SET status='PAID',completed_at=created_at WHERE id=?",
+                    order))
         .isInstanceOf(org.springframework.dao.DataAccessException.class)
         .hasRootCauseInstanceOf(java.sql.SQLException.class)
-        .satisfies(error -> {
-          var sql = (java.sql.SQLException)
-              ((org.springframework.dao.DataAccessException) error).getMostSpecificCause();
-          assertThat(sql.getErrorCode()).isEqualTo(3819);
-          assertThat(sql.getMessage()).contains("ck_order_payment");
-        });
+        .satisfies(
+            error -> {
+              var sql =
+                  (java.sql.SQLException)
+                      ((org.springframework.dao.DataAccessException) error).getMostSpecificCause();
+              assertThat(sql.getErrorCode()).isEqualTo(3819);
+              assertThat(sql.getMessage()).contains("ck_order_payment");
+            });
     assertThat(state(order)).isEqualTo("RESERVED");
     stockIs(product, 10, 2);
   }
 
   @Test
   void openApiListsLifecycleOperationsWithBearerRequirements() throws Exception {
-    mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
-        .andExpect(jsonPath("$.paths['/api/orders/{id}/simulated-payment'].post.security[0].bearerAuth").isArray())
-        .andExpect(jsonPath("$.paths['/api/orders/{id}/cancel'].post.security[0].bearerAuth").isArray());
+    mvc.perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.paths['/api/orders/{id}/simulated-payment'].post.security[0].bearerAuth")
+                .isArray())
+        .andExpect(
+            jsonPath("$.paths['/api/orders/{id}/cancel'].post.security[0].bearerAuth").isArray());
   }
 
   @Test
   void failureOnALaterInventoryLineRollsBackEarlierConsumption() throws Exception {
     var ids = new ArrayList<>(List.of(product("A", 10), product("B", 10)));
     ids.sort(String::compareTo);
-    String order = reply(owner.token(), "multi-line-order", List.of(item(ids.get(1), 2), item(ids.get(0), 2)))
-        .body().get("id").asText();
-    // Deliberate test-only drift: still satisfies product CHECK, but violates the order reservation.
+    String order =
+        reply(owner.token(), "multi-line-order", List.of(item(ids.get(1), 2), item(ids.get(0), 2)))
+            .body()
+            .get("id")
+            .asText();
+    // Deliberate test-only drift: still satisfies product CHECK, but violates the order
+    // reservation.
     jdbc.update("UPDATE products SET reserved=0 WHERE id=?", ids.get(1));
     payment(owner.token(), order, "multi-line-payment", "APPROVED")
-        .andExpect(status().isInternalServerError()).andExpect(jsonPath("$.code").value("internal_error"));
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.code").value("internal_error"));
     stockIs(ids.get(0), 10, 2);
     stockIs(ids.get(1), 10, 0);
     assertThat(state(order)).isEqualTo("RESERVED");
@@ -870,15 +991,27 @@ class OrderFlowIT {
   void distinctOrdersWithSharedProductsCompleteWithoutInconsistentLockOrdering() throws Exception {
     String a = product("A", 20), b = product("B", 20);
     List<String> ids = new ArrayList<>();
-    for (int i=0; i<8; i++) ids.add(reply(owner.token(), "shared-order-" + i,
-        i % 2 == 0 ? List.of(item(a, 1), item(b, 1)) : List.of(item(b, 1), item(a, 1)))
-        .body().get("id").asText());
-    concurrently(8, i -> {
-      if (i % 2 == 0) lifecycle.pay(ids.get(i), ownerActor(), "shared-payment-key",
-          dev.lattante.commerceflow.orders.PaymentDecision.APPROVED);
-      else lifecycle.cancel(ids.get(i), ownerActor());
-      return new Reply(200, null, null);
-    });
+    for (int i = 0; i < 8; i++)
+      ids.add(
+          reply(
+                  owner.token(),
+                  "shared-order-" + i,
+                  i % 2 == 0 ? List.of(item(a, 1), item(b, 1)) : List.of(item(b, 1), item(a, 1)))
+              .body()
+              .get("id")
+              .asText());
+    concurrently(
+        8,
+        i -> {
+          if (i % 2 == 0)
+            lifecycle.pay(
+                ids.get(i),
+                ownerActor(),
+                "shared-payment-key",
+                dev.lattante.commerceflow.orders.PaymentDecision.APPROVED);
+          else lifecycle.cancel(ids.get(i), ownerActor());
+          return new Reply(200, null, null);
+        });
     stockIs(a, 16, 0);
     stockIs(b, 16, 0);
     assertThat(count("outbox_events")).isEqualTo(16);
@@ -889,7 +1022,7 @@ class OrderFlowIT {
     String product = product("A", 200);
     List<String> due = new ArrayList<>();
     // Populate through the real creation API to retain all domain invariants and FK data.
-    for (int i=0; i<102; i++) {
+    for (int i = 0; i < 102; i++) {
       String id = newOrder(product, 1);
       due.add(id);
       dueNow(id);
@@ -900,24 +1033,116 @@ class OrderFlowIT {
     due.sort(String::compareTo); // identical deadlines in the controlled clock
     assertThat(lifecycle.dueCandidates()).containsExactlyElementsOf(due.subList(0, 100));
     assertThat(lifecycle.expire(due.getFirst())).isTrue();
-    assertThat(lifecycle.dueCandidates()).hasSize(100)
+    assertThat(lifecycle.dueCandidates())
+        .hasSize(100)
         .doesNotContain(due.getFirst(), future, cancelled);
     stockIs(product, 200, 102); // 101 remaining due + one future; cancellation/expiry released
   }
 
   @Test
   void transportEnqueueFailureAlsoRollsBackTheBusinessOutboxAndReservation() throws Exception {
-    String product=product("A",10);
-    jdbc.execute("CREATE TRIGGER reject_dispatch BEFORE INSERT ON message_dispatch FOR EACH ROW"
-        + " SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected transport failure'");
+    String product = product("A", 10);
+    jdbc.execute(
+        "CREATE TRIGGER reject_dispatch BEFORE INSERT ON message_dispatch FOR EACH ROW"
+            + " SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected transport failure'");
     try {
-      submit(owner.token(),"transport-rollback-key",items(product,2)).andExpect(status().isInternalServerError());
+      submit(owner.token(), "transport-rollback-key", items(product, 2))
+          .andExpect(status().isInternalServerError());
       nothingCommitted();
-      stockIs(product,10,0);
+      stockIs(product, 10, 0);
       assertThat(count("message_dispatch")).isZero();
-    } finally { jdbc.execute("DROP TRIGGER reject_dispatch"); }
-    submit(owner.token(),"transport-rollback-key",items(product,2)).andExpect(status().isCreated());
+    } finally {
+      jdbc.execute("DROP TRIGGER reject_dispatch");
+    }
+    submit(owner.token(), "transport-rollback-key", items(product, 2))
+        .andExpect(status().isCreated());
     assertThat(count("outbox_events")).isEqualTo(1);
     assertThat(count("message_dispatch")).isEqualTo(1);
+  }
+
+  private double transitions(String action) {
+    return transitionMetrics.counter("commerceflow.order.transitions", "action", action).count();
+  }
+
+  @Test
+  void creationAndPaymentReplayProduceOneAuditAndOneCommittedCounterPerTransition()
+      throws Exception {
+    String product = product("AUDIT", 10);
+    double reservedBefore = transitions("order_reserved"), paidBefore = transitions("order_paid");
+    var first = reply(owner.token(), "audit-create-key", items(product, 2));
+    String order = first.body().get("id").asText();
+    assertThat(reply(owner.token(), "audit-create-key", items(product, 2)).status()).isEqualTo(200);
+    payment(owner.token(), order, "audit-payment-key", "APPROVED").andExpect(status().isOk());
+    payment(owner.token(), order, "audit-payment-key", "APPROVED").andExpect(status().isOk());
+    assertThat(count("order_operation_audit")).isEqualTo(2);
+    assertThat(transitions("order_reserved")).isEqualTo(reservedBefore + 1);
+    assertThat(transitions("order_paid")).isEqualTo(paidBefore + 1);
+    mvc.perform(
+            get("/api/orders/" + order + "/audit")
+                .header("Authorization", "Bearer " + owner.token()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].sequence").value(1))
+        .andExpect(jsonPath("$[1].sequence").value(2))
+        .andExpect(jsonPath("$[1].actorId").value(owner.id()));
+    var stranger = customer("audit-stranger@example.test");
+    mvc.perform(
+            get("/api/orders/" + order + "/audit")
+                .header("Authorization", "Bearer " + stranger.token()))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void auditInsertionFailureRollsBackAllOrderSideEffects() throws Exception {
+    String product = product("AUDIT", 10);
+    double before = transitions("order_reserved");
+    jdbc.execute(
+        "CREATE TRIGGER reject_audit BEFORE INSERT ON order_operation_audit FOR EACH ROW"
+            + " SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected audit failure'");
+    try {
+      submit(owner.token(), "audit-rollback-key", items(product, 2))
+          .andExpect(status().isInternalServerError());
+      nothingCommitted();
+      stockIs(product, 10, 0);
+      assertThat(count("message_dispatch")).isZero();
+      assertThat(count("order_operation_audit")).isZero();
+      assertThat(transitions("order_reserved")).isEqualTo(before);
+    } finally {
+      jdbc.execute("DROP TRIGGER reject_audit");
+    }
+    submit(owner.token(), "audit-rollback-key", items(product, 2)).andExpect(status().isCreated());
+    assertThat(count("order_operation_audit")).isEqualTo(1);
+    assertThat(transitions("order_reserved")).isEqualTo(before + 1);
+  }
+
+  @Test
+  void anOutboxFailureAfterAuditRegistrationDoesNotIncrementCommittedCounters() throws Exception {
+    String product = product("AUDIT", 10);
+    double before = transitions("order_reserved");
+    jdbc.execute(
+        "CREATE TRIGGER reject_outbox BEFORE INSERT ON outbox_events FOR EACH ROW"
+            + " SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected later failure'");
+    try {
+      submit(owner.token(), "metric-rollback-key", items(product, 1))
+          .andExpect(status().isInternalServerError());
+      assertThat(count("order_operation_audit")).isZero();
+      assertThat(transitions("order_reserved")).isEqualTo(before);
+    } finally {
+      jdbc.execute("DROP TRIGGER reject_outbox");
+    }
+  }
+
+  @Test
+  void expiryAuditAttributesTheTransitionToTheSystemAndDoesNotDuplicateIt() throws Exception {
+    String product = product("AUDIT", 10), order = newOrder(product, 2);
+    dueNow(order);
+    assertThat(lifecycle.expire(order)).isTrue();
+    assertThat(lifecycle.expire(order)).isFalse();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT actor_id IS NULL FROM order_operation_audit WHERE sequence_no=2",
+                Boolean.class))
+        .isTrue();
+    assertThat(count("order_operation_audit")).isEqualTo(2);
+    stockIs(product, 10, 0);
   }
 }

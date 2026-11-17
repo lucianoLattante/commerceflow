@@ -15,9 +15,15 @@ public class OrderLifecycleService {
   private final InventoryReservation inventory;
   private final OrderEventSink events;
   private final Clock clock;
+  private final dev.lattante.commerceflow.operability.OrderOperationAudit audit;
 
-  public OrderLifecycleService(OrderRepository orders, InventoryReservation inventory,
-      OrderEventSink events, Clock clock) {
+  public OrderLifecycleService(
+      OrderRepository orders,
+      InventoryReservation inventory,
+      OrderEventSink events,
+      Clock clock,
+      dev.lattante.commerceflow.operability.OrderOperationAudit audit) {
+    this.audit = audit;
     this.orders = orders;
     this.inventory = inventory;
     this.events = events;
@@ -40,7 +46,7 @@ public class OrderLifecycleService {
     order.pay(digest, decision, now);
     if (decision == PaymentDecision.APPROVED) inventory.consume(order.demands());
     else inventory.release(order.demands());
-    record(order, now);
+    record(order, now, actor.id());
     return new PaymentResult(OrderService.view(order), false);
   }
 
@@ -49,11 +55,11 @@ public class OrderLifecycleService {
     PurchaseOrder order = ownedLocked(id, actor);
     Instant now = now();
     if (expireIfDue(order, now)
-        || order.status() == OrderStatus.CANCELLED || order.status() == OrderStatus.EXPIRED)
-      return OrderService.view(order);
+        || order.status() == OrderStatus.CANCELLED
+        || order.status() == OrderStatus.EXPIRED) return OrderService.view(order);
     order.cancel(now);
     inventory.release(order.demands());
-    record(order, now);
+    record(order, now, actor.id());
     return OrderService.view(order);
   }
 
@@ -73,7 +79,7 @@ public class OrderLifecycleService {
     if (!order.due(now)) return false;
     order.expire(now);
     inventory.release(order.demands());
-    record(order, now);
+    record(order, now, null);
     return true;
   }
 
@@ -88,11 +94,23 @@ public class OrderLifecycleService {
     return clock.instant().truncatedTo(ChronoUnit.MICROS);
   }
 
-  private void record(PurchaseOrder order, Instant now) {
+  private void record(PurchaseOrder order, Instant now, String actor) {
     // Flush JPA before the JDBC outbox write, but commit both with the same transaction manager.
     orders.flush();
-    events.orderCompleted(new OrderEventSink.CompletedOrder(
-        UUID.randomUUID(), order.id(), order.customerId(), order.status(),
-        order.total(), order.currency(), now));
+    audit.record(
+        order.id(),
+        actor,
+        dev.lattante.commerceflow.operability.OrderOperationAudit.Action.valueOf(
+            "ORDER_" + order.status().name()),
+        now);
+    events.orderCompleted(
+        new OrderEventSink.CompletedOrder(
+            UUID.randomUUID(),
+            order.id(),
+            order.customerId(),
+            order.status(),
+            order.total(),
+            order.currency(),
+            now));
   }
 }

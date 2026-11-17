@@ -34,7 +34,12 @@ class OrderServiceTest {
     when(repository.saveAndFlush(any(PurchaseOrder.class))).thenAnswer(call -> call.getArgument(0));
     OrderService service =
         new OrderService(
-            repository, inventory, claims, events, Clock.fixed(precise, ZoneOffset.UTC));
+            repository,
+            inventory,
+            claims,
+            events,
+            Clock.fixed(precise, ZoneOffset.UTC),
+            mock(dev.lattante.commerceflow.operability.OrderOperationAudit.class));
     var created =
         service.create(
             actor,

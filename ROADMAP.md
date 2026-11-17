@@ -50,3 +50,16 @@ Payments are synthetic. No real money/provider/refund, production Kafka ACL/TLS,
 resilience, complete dependency advisory audit, load benchmark or public deployment is verified.
 At-least-once messaging relies on inbox deduplication; no external exactly-once guarantee is claimed.
 Expiry has no exact timing SLA, and leases require synchronized clocks across publisher instances.
+
+## CF-06 admission/audit/metrics increment — under verification
+- [x] Redis atomic shared admission windows for login, registration and authorized writes.
+- [x] Fail closed on protected operations; logout/read access remains available.
+- [x] Forwarding headers do not select a quota identity; stored keys are digests.
+- [x] Order-operation audit shares the order transaction; transition counters run after commit.
+- [x] Delivery/queue/dead-letter metrics and metadata-only admin queries.
+- [x] 90 unit tests passed locally; integration classes compile.
+- [ ] Execute complete MySQL/Kafka/Redis tests and Compose HTTP smoke in CI.
+- [ ] Record exact source/runtime evidence and integrate the reviewed PR.
+
+This is a bounded CF-06 increment, not completion of deferred identity administration,
+retention/cleanup, production proxy/security design, load benchmarking or deployment.
