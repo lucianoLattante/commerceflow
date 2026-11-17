@@ -373,4 +373,29 @@ class KafkaDeliveryIT {
     }
     assertThatThrownBy(()->operations.retry(id,admin,"retry-cycle-four")).isInstanceOf(MessageFailure.Conflict.class);
   }
+
+  @Test void multiplePublishersClaimDistinctRowsWithoutSimultaneousDuplicateDelivery() throws Exception {
+    List<String> ids=new ArrayList<>();for(int i=0;i<8;i++)ids.add(order());
+    try(var pool=Executors.newFixedThreadPool(8)){
+      CountDownLatch start=new CountDownLatch(1);List<Future<Boolean>> work=new ArrayList<>();
+      for(int i=0;i<8;i++)work.add(pool.submit(()->{start.await();return dispatcher.dispatchOnce();}));
+      start.countDown();
+      for(var result:work)assertThat(result.get(20,TimeUnit.SECONDS)).isTrue();
+    }
+    eventually(()->count("message_inbox")==8);
+    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM message_dispatch WHERE state='SENT' AND attempts=1",Long.class)).isEqualTo(8);
+    for(String id:ids)assertThat(inbox.find(id).sequence()).isEqualTo(1);
+  }
+
+  @Test void repeatedConcurrentRecoveryOfOneBrokerOffsetCreatesOneDlqTransport() throws Exception {
+    try(var pool=Executors.newFixedThreadPool(8)){
+      List<Callable<String>> work=new ArrayList<>();
+      for(int i=0;i<8;i++)work.add(()->deadLetters.capture(OrderMessageCodec.TOPIC,1,12345,"key","immutable"));
+      Set<String> ids=new HashSet<>();
+      for(var result:pool.invokeAll(work))ids.add(result.get(20,TimeUnit.SECONDS));
+      assertThat(ids).hasSize(1);
+    }
+    assertThat(count("message_dead_letters")).isEqualTo(1);
+    assertThat(count("message_dispatch")).isEqualTo(1);
+  }
 }
