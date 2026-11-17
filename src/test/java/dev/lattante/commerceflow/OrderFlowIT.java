@@ -821,7 +821,14 @@ class OrderFlowIT {
   void databaseRejectsTerminalStatesWithoutMatchingPaymentMetadata() throws Exception {
     String product = product("A", 10), order = newOrder(product, 2);
     assertThatThrownBy(() -> jdbc.update("UPDATE customer_orders SET status='PAID',completed_at=created_at WHERE id=?", order))
-        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        .isInstanceOf(org.springframework.dao.DataAccessException.class)
+        .hasRootCauseInstanceOf(java.sql.SQLException.class)
+        .satisfies(error -> {
+          var sql = (java.sql.SQLException)
+              ((org.springframework.dao.DataAccessException) error).getMostSpecificCause();
+          assertThat(sql.getErrorCode()).isEqualTo(3819);
+          assertThat(sql.getMessage()).contains("ck_order_payment");
+        });
     assertThat(state(order)).isEqualTo("RESERVED");
     stockIs(product, 10, 2);
   }
