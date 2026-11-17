@@ -37,7 +37,8 @@ GitHub PR pages record integration state separately from test success.
 - [x] Add order-operation audit beyond message recovery, committed transition/delivery/queue metrics and failure demonstrations.
 - [x] Make metadata-only admin queries avoid message payloads; expose audit pagination.
 - [ ] Extend operator visibility, retention and poison-backlog handling.
-- [ ] Extend concrete product/identity administration use cases.
+- [x] Concrete versioned product administration with atomic audit.
+- [ ] Extend identity administration use cases.
 - [ ] Finish the reproducible demonstration and case study.
 
 ## Deferred identity maintenance
@@ -64,3 +65,13 @@ Expiry has no exact timing SLA, and leases require synchronized clocks across pu
 
 This checkpoint leaves identity/product administration, retention/cleanup, full advisory audit,
 load tests, production proxy/broker/Redis hardening and deployment explicitly deferred.
+
+## Verified catalog administration increment
+
+- [x] ADMIN discovery, detail and version-precondition revision; no product deletion.
+- [x] Shared inventory row lock/version, absolute onHand/reserved invariant and inactive reservation guard.
+- [x] Transactional before/after audit, pagination and V6; V1-V5 preserved.
+- [x] 99 local unit tests passed; integration sources compiled.
+- [x] CI 44089250548 passed 99 unit + 123 MySQL/Kafka/Redis integration tests and Compose HTTP administration smoke.
+- [x] Review changed paths, released migrations, source hashes and runtime evidence; PR #6 records integration state.
+- [ ] Next: user administration, then operational maintenance/retention and presentation.

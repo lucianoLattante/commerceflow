@@ -2,7 +2,7 @@
 
 Original commerce backend by Luciano Lattante. Built incrementally as a **modular monolith**, with Java 21, Spring Boot, MySQL and explicit domain invariants.
 
-**Current status: verified admission, audit and metrics checkpoint.** The order lifecycle now feeds a leased Kafka publisher and an idempotent asynchronous projection, with bounded retries, durable DLQ and audited ADMIN replay. No real payment/provider or public deployment is involved. CF-06 adds Redis-backed admission, transactional order audit and committed-operation metrics; the executed evidence is recorded below.
+**Current status: verified catalog administration, order lifecycle and operational recovery.** The order lifecycle now feeds a leased Kafka publisher and an idempotent asynchronous projection, with bounded retries, durable DLQ and audited ADMIN replay. No real payment/provider or public deployment is involved. CF-06 adds Redis-backed admission, transactional order audit and committed-operation metrics; the executed evidence is recorded below.
 
 [Order creation](docs/ORDERS.md) · [Payment, cancellation and expiry](docs/LIFECYCLE.md) · [Kafka, inbox and DLQ](docs/MESSAGING.md) · [Admission, audit and metrics](docs/OPERABILITY.md)
 
@@ -116,3 +116,14 @@ The unit result alone is not evidence of MySQL concurrency or rollback. OrderFlo
 - [Case study and interview discussion](docs/CASE_STUDY.md)
 
 The repository contains original portfolio code, with no employer source or production data.
+
+## Verified product administration
+
+ADMIN can discover inactive products and revise name, price/currency, active state and absolute on-hand
+stock using an expected version. Existing order snapshots and reservations are preserved. Actor-attributed
+before/after audit shares the product transaction. See the [API and retry contract](docs/CATALOG_ADMINISTRATION.md)
+and [ADR 7](docs/adr/0007-catalog-revisions.md). Executed validation is tracked in [VERIFICATION.md](docs/VERIFICATION.md).
+User administration and retention remain deferred.
+
+Catalog checkpoint CI 44089250548 passed **99 unit + 123 MySQL/Kafka/Redis integration tests**,
+plus Compose startup and the actual HTTP flow. See [exact evidence](docs/VERIFICATION.md).

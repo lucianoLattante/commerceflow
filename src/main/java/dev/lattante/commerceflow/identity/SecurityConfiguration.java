@@ -81,7 +81,10 @@ class SecurityConfiguration {
                         "/api/orders/*/simulated-payment",
                         "/api/orders/*/cancel")
                     .authenticated()
-                    .requestMatchers("/api/admin/messaging/**", "/api/admin/operations/**")
+                    .requestMatchers(
+                        "/api/admin/messaging/**",
+                        "/api/admin/operations/**",
+                        "/api/admin/catalog/**")
                     .hasRole("ADMIN")
                     .requestMatchers(
                         HttpMethod.GET,

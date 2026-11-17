@@ -124,6 +124,7 @@ class KafkaDeliveryIT {
       jdbc.execute("DROP TRIGGER IF EXISTS " + trigger);
     for (String table :
         List.of(
+            "product_change_audit",
             "order_operation_audit",
             "message_operator_requests",
             "message_dispatch",

@@ -40,7 +40,7 @@ public class CatalogService {
 
   @Transactional(readOnly = true)
   public ProductView find(String id) {
-    return view(products.findById(id).orElseThrow(NotFound::new));
+    return view(products.findById(id).filter(Product::isActive).orElseThrow(NotFound::new));
   }
 
   @Transactional(readOnly = true)
@@ -56,7 +56,10 @@ public class CatalogService {
             .replace("%", "\\%")
             .replace("_", "\\_");
     Specification<Product> spec =
-        (root, q, cb) -> cb.like(cb.lower(root.get("name")), "%" + literal + "%", '\\');
+        (root, q, cb) ->
+            cb.and(
+                cb.isTrue(root.get("active")),
+                cb.like(cb.lower(root.get("name")), "%" + literal + "%", '\\'));
     Page<Product> result = products.findAll(spec, PageRequest.of(page, size, Sort.by("sku")));
     return new PageView<>(
         result.map(CatalogService::view).getContent(), page, size, result.getTotalElements());

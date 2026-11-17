@@ -102,6 +102,27 @@ for order_id in (created["id"], second["id"], third["id"]):
     assert all("password" not in entry and "token" not in entry for entry in history)
 call("GET", "/api/admin/operations/audit", token=access, expected=403)
 
+
+# Administrative revision keeps reservations server-owned and records one atomic change.
+admin_path = "/api/admin/catalog/products/" + product["id"]
+current_product = call("GET", admin_path, token=admin)
+revision = {"expectedVersion": current_product["state"]["version"], "name": "Reviewed smoke fixture",
+            "amount": "20.00", "currency": "USD", "onHand": 3, "active": False,
+            "reason": "Disposable catalog administration smoke"}
+call("PUT", admin_path, revision, token=access, expected=403)
+changed = call("PUT", admin_path, revision, token=admin)
+assert changed["state"]["onHand"] == 3 and changed["state"]["active"] is False
+call("PUT", admin_path, revision, token=admin, expected=409)
+call("GET", "/api/products/" + product["id"], expected=404)
+assert call("GET", admin_path + "/audit", token=admin)["totalElements"] == 1
+assert call("GET", "/api/orders/" + created["id"], token=access)["total"] == Decimal("24.68")
+revision["expectedVersion"] = changed["state"]["version"]
+revision["active"] = True
+call("PUT", admin_path, revision, token=admin)
+assert call("GET", "/api/products/" + product["id"])["available"] == 3
+assert call("GET", admin_path + "/audit", token=admin)["totalElements"] == 2
+print("Catalog HTTP smoke passed: ADMIN boundary, revisions, audit and original order totals.")
+
 # Compose enables admission. Existing smoke logins share this loopback socket budget.
 limited = False
 for attempt in range(6):

@@ -106,12 +106,15 @@ class SchemaUpgradeIT {
         assertThat(row.getString(1)).isEqualTo("upgrade@example.test");
       }
       try (ResultSet row =
-          statement.executeQuery("SELECT sku,amount,on_hand,reserved FROM products")) {
+          statement.executeQuery(
+              "SELECT sku,amount,on_hand,reserved,active,version FROM products")) {
         assertThat(row.next()).isTrue();
         assertThat(row.getString(1)).isEqualTo("UPGRADE-SKU");
         assertThat(row.getBigDecimal(2)).isEqualByComparingTo("12.34");
         assertThat(row.getInt(3)).isEqualTo(7);
         assertThat(row.getInt(4)).isEqualTo(2);
+        assertThat(row.getBoolean(5)).isTrue();
+        assertThat(row.getLong(6)).isZero();
       }
       try (ResultSet row =
           statement.executeQuery(
@@ -149,7 +152,7 @@ class SchemaUpgradeIT {
       try (ResultSet row =
           statement.executeQuery("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1")) {
         row.next();
-        assertThat(row.getLong(1)).isEqualTo(5);
+        assertThat(row.getLong(1)).isEqualTo(6);
       }
     }
   }
