@@ -77,3 +77,15 @@ without an extra allowance.
 25. Why record business counters after commit, while send attempts have different semantics?
 26. Why are durable audit, restartable counters and read-time gauges different kinds of evidence?
 27. Why must a failed database observation be unknown rather than a healthy zero?
+
+## Catalog revision demonstration
+Read the administrative product version, reserve units and submit the old version: the change must
+conflict. Read again, deactivate the product and complete the existing order at its original price.
+Finally inject an audit insertion failure in the disposable test database and show fields/version
+rolling back together. Use only the scenarios whose linked integration run passed.
+
+28. Why share the product version between reservations and administrative stock reconciliation?
+29. Why does a stale absolute revision return conflict instead of automatically merging?
+30. How can an inactive product still require payment, release and expiry behavior?
+31. Why flush before auditing, and why is a flushed write still reversible before commit?
+32. What would relative stock deltas require to make retries safe?

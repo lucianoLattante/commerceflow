@@ -31,7 +31,9 @@ public class ApiErrors {
 
   @ExceptionHandler(dev.lattante.commerceflow.orders.OrderStateConflict.class)
   ProblemDetail orderState() {
-    return problem(HttpStatus.CONFLICT, "order_state_conflict",
+    return problem(
+        HttpStatus.CONFLICT,
+        "order_state_conflict",
         "Operation is incompatible with the current order state");
   }
 
@@ -43,17 +45,23 @@ public class ApiErrors {
             problem(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "database_busy",
-                "Retry this request with the same idempotency key"));
+                "Retry according to the endpoint idempotency or version contract"));
   }
 
   @ExceptionHandler(dev.lattante.commerceflow.messaging.MessageFailure.Conflict.class)
   ProblemDetail messageState() {
-    return problem(HttpStatus.CONFLICT, "message_state_conflict", "Message cannot be retried or replayed");
+    return problem(
+        HttpStatus.CONFLICT, "message_state_conflict", "Message cannot be retried or replayed");
   }
 
   @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
   ProblemDetail accessDenied() {
     return problem(HttpStatus.FORBIDDEN, "forbidden", "Operation is not permitted");
+  }
+
+  @ExceptionHandler(dev.lattante.commerceflow.catalog.ProductConflict.class)
+  ProblemDetail productConflict(dev.lattante.commerceflow.catalog.ProductConflict e) {
+    return problem(HttpStatus.CONFLICT, "product_conflict", e.getMessage());
   }
 
   @ExceptionHandler(DomainViolation.class)

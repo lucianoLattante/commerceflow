@@ -88,6 +88,7 @@ class RedisGuardIT {
     }
     for (String table :
         List.of(
+            "product_change_audit",
             "order_operation_audit",
             "message_operator_requests",
             "message_dispatch",

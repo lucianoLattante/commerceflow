@@ -51,6 +51,7 @@ class CommerceFlowIT {
 
   @BeforeEach
   void clean() {
+    jdbc.update("DELETE FROM product_change_audit");
     jdbc.update("DELETE FROM access_tokens");
     jdbc.update("DELETE FROM products");
     jdbc.update("DELETE FROM app_users");
@@ -109,7 +110,7 @@ class CommerceFlowIT {
     assertThat(
             jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Long.class))
-        .isEqualTo(5);
+        .isEqualTo(6);
   }
 
   @Test

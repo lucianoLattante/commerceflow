@@ -36,6 +36,9 @@ class Product {
   @Column(nullable = false)
   private int reserved;
 
+  @Column(nullable = false)
+  private boolean active = true;
+
   @Version private long version;
 
   @Column(name = "created_at", nullable = false)
@@ -73,7 +76,34 @@ class Product {
     return currency;
   }
 
+  boolean isActive() {
+    return active;
+  }
+
+  long getVersion() {
+    return version;
+  }
+
+  boolean revise(ProductEdit edit) {
+    if (version != edit.expectedVersion())
+      throw new ProductConflict("Product changed; read the current version and reconcile");
+    if (edit.onHand() < reserved)
+      throw new ProductConflict("On-hand stock cannot be lower than existing reservations");
+    if (name.equals(edit.name())
+        && amount.compareTo(edit.amount()) == 0
+        && currency == edit.currency()
+        && onHand == edit.onHand()
+        && active == edit.active()) return false;
+    name = edit.name();
+    amount = edit.amount();
+    currency = edit.currency();
+    onHand = edit.onHand();
+    active = edit.active();
+    return true;
+  }
+
   void reserve(int quantity) {
+    if (!active) throw new ProductConflict("Product is inactive");
     Stock next = getStock().reserve(quantity);
     this.reserved = next.reserved();
   }

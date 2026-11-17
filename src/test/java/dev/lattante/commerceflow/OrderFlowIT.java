@@ -72,11 +72,13 @@ class OrderFlowIT {
   void clean() throws Exception {
     org.mockito.Mockito.when(lifecycleClock.instant())
         .thenReturn(java.time.Instant.parse("2026-01-01T00:00:00.123456789Z"));
+    jdbc.execute("DROP TRIGGER IF EXISTS reject_product_audit");
     jdbc.execute("DROP TRIGGER IF EXISTS reject_outbox");
     jdbc.execute("DROP TRIGGER IF EXISTS reject_dispatch");
     jdbc.execute("DROP TRIGGER IF EXISTS reject_audit");
     for (String table :
         List.of(
+            "product_change_audit",
             "order_operation_audit",
             "message_operator_requests",
             "message_dead_letters",
@@ -1144,5 +1146,359 @@ class OrderFlowIT {
         .isTrue();
     assertThat(count("order_operation_audit")).isEqualTo(2);
     stockIs(product, 10, 0);
+  }
+
+  private String catalogPath(String product) {
+    return "/api/admin/catalog/products/" + product;
+  }
+
+  private long productVersion(String product) {
+    return jdbc.queryForObject("SELECT version FROM products WHERE id=?", Long.class, product);
+  }
+
+  private Map<String, Object> catalogEdit(String product, int onHand, boolean active) {
+    return new HashMap<>(
+        Map.of(
+            "expectedVersion",
+            productVersion(product),
+            "name",
+            "Revised product",
+            "amount",
+            "25.00",
+            "currency",
+            "USD",
+            "onHand",
+            onHand,
+            "active",
+            active,
+            "reason",
+            "Inventory review"));
+  }
+
+  private ResultActions changeProduct(String product, String token, Map<String, Object> input)
+      throws Exception {
+    return mvc.perform(
+        put(catalogPath(product))
+            .header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(body(input)));
+  }
+
+  @Test
+  void catalogAdministrationIsAdminOnlyIncludingHistoryAndInactiveDiscovery() throws Exception {
+    String id = product("ADMIN-CATALOG", 10);
+    for (String route :
+        List.of("/api/admin/catalog/products", catalogPath(id), catalogPath(id) + "/audit")) {
+      mvc.perform(get(route)).andExpect(status().isUnauthorized());
+      mvc.perform(get(route).header("Authorization", "Bearer " + owner.token()))
+          .andExpect(status().isForbidden());
+    }
+    mvc.perform(
+            put(catalogPath(id))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(catalogEdit(id, 20, false))))
+        .andExpect(status().isUnauthorized());
+    changeProduct(id, owner.token(), catalogEdit(id, 20, false)).andExpect(status().isForbidden());
+    stockIs(id, 10, 0);
+    assertThat(count("product_change_audit")).isZero();
+  }
+
+  @Test
+  void changesAreAtomicAuditedAndCatalogVersionAdvances() throws Exception {
+    String id = product("ADMIN-CATALOG", 10);
+    changeProduct(id, admin, catalogEdit(id, 20, true))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.state.version").value(1))
+        .andExpect(jsonPath("$.state.onHand").value(20));
+    mvc.perform(get(catalogPath(id) + "/audit").header("Authorization", "Bearer " + admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.totalElements").value(1))
+        .andExpect(jsonPath("$.content[0].before.name").value("Snapshot ADMIN-CATALOG"))
+        .andExpect(jsonPath("$.content[0].before.onHand").value(10))
+        .andExpect(jsonPath("$.content[0].after.onHand").value(20))
+        .andExpect(jsonPath("$.content[0].after.version").value(1))
+        .andExpect(jsonPath("$.content[0].reason").value("Inventory review"));
+    assertThat(jdbc.queryForObject("SELECT actor_id FROM product_change_audit", String.class))
+        .isEqualTo(
+            jdbc.queryForObject("SELECT id FROM app_users WHERE email=?", String.class, ADMIN));
+    mvc.perform(get("/api/products/" + id))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.name").value("Revised product"))
+        .andExpect(jsonPath("$.amount").value(25.00));
+  }
+
+  @Test
+  void disablingHidesPublicProductButCanBeDiscoveredAndReactivatedByAdmin() throws Exception {
+    String id = product("DEACTIVATED", 10);
+    changeProduct(id, admin, catalogEdit(id, 10, false)).andExpect(status().isOk());
+    mvc.perform(get("/api/products/" + id)).andExpect(status().isNotFound());
+    mvc.perform(get("/api/products")).andExpect(jsonPath("$.totalElements").value(0));
+    mvc.perform(
+            get("/api/admin/catalog/products")
+                .param("active", "false")
+                .header("Authorization", "Bearer " + admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content[0].id").value(id))
+        .andExpect(jsonPath("$.totalElements").value(1));
+    submit(owner.token(), "inactive-product-key", items(id, 1)).andExpect(status().isConflict());
+    nothingCommitted();
+    changeProduct(id, admin, catalogEdit(id, 10, true)).andExpect(status().isOk());
+    submit(owner.token(), "inactive-product-key", items(id, 1)).andExpect(status().isCreated());
+    assertThat(count("product_change_audit")).isEqualTo(2);
+  }
+
+  @Test
+  void existingOrderSnapshotsAndPaymentsSurviveCatalogRevisionAndDeactivation() throws Exception {
+    String id = product("SNAPSHOT-ADMIN", 10), order = newOrder(id, 2);
+    var input = catalogEdit(id, 12, false);
+    input.put("currency", "EUR");
+    changeProduct(id, admin, input).andExpect(status().isOk());
+    payment(owner.token(), order, "old-price-payment", "APPROVED")
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.total").value(24.68))
+        .andExpect(jsonPath("$.currency").value("USD"))
+        .andExpect(jsonPath("$.items[0].name").value("Snapshot SNAPSHOT-ADMIN"));
+    stockIs(id, 10, 0);
+    assertThat(count("product_change_audit")).isEqualTo(1);
+  }
+
+  @Test
+  void cancellingAnInactiveProductStillReleasesItsReservation() throws Exception {
+    String id = product("CANCEL-INACTIVE", 10), order = newOrder(id, 2);
+    changeProduct(id, admin, catalogEdit(id, 10, false)).andExpect(status().isOk());
+    mvc.perform(
+            post("/api/orders/" + order + "/cancel")
+                .header("Authorization", "Bearer " + owner.token()))
+        .andExpect(status().isOk());
+    stockIs(id, 10, 0);
+  }
+
+  @Test
+  void reducingOnHandBelowReservationsIsAConflictWithNoPartialChangeOrAudit() throws Exception {
+    String id = product("RESERVED-ADMIN", 10);
+    newOrder(id, 4);
+    long version = productVersion(id);
+    changeProduct(id, admin, catalogEdit(id, 3, false))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("product_conflict"));
+    stockIs(id, 10, 4);
+    assertThat(productVersion(id)).isEqualTo(version);
+    assertThat(count("product_change_audit")).isZero();
+    mvc.perform(get("/api/products/" + id))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.name").value("Snapshot RESERVED-ADMIN"));
+  }
+
+  @Test
+  void staleEditsAndRepeatedPutDoNotApplyAgainOrDuplicateHistory() throws Exception {
+    String id = product("VERSIONED", 10);
+    var input = catalogEdit(id, 15, true);
+    changeProduct(id, admin, input).andExpect(status().isOk());
+    changeProduct(id, admin, input).andExpect(status().isConflict());
+    var noOp = catalogEdit(id, 15, true);
+    changeProduct(id, admin, noOp)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.state.version").value(1));
+    assertThat(count("product_change_audit")).isEqualTo(1);
+    stockIs(id, 15, 0);
+  }
+
+  @Test
+  void inventoryReservationAdvancesTheVersionAndInvalidatesAdministrativeSnapshot()
+      throws Exception {
+    String id = product("RESERVATION-VERSION", 10);
+    var input = catalogEdit(id, 15, true);
+    newOrder(id, 2);
+    changeProduct(id, admin, input).andExpect(status().isConflict());
+    stockIs(id, 10, 2);
+    assertThat(count("product_change_audit")).isZero();
+  }
+
+  @Test
+  void auditFailureRollsBackProductStateAndHibernateVersion() throws Exception {
+    String id = product("AUDIT-PRODUCT", 10);
+    jdbc.execute(
+        "CREATE TRIGGER reject_product_audit BEFORE INSERT ON product_change_audit FOR EACH ROW"
+            + " SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected product audit failure'");
+    try {
+      changeProduct(id, admin, catalogEdit(id, 20, false))
+          .andExpect(status().isInternalServerError());
+      stockIs(id, 10, 0);
+      assertThat(productVersion(id)).isZero();
+      assertThat(count("product_change_audit")).isZero();
+      mvc.perform(get("/api/products/" + id))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.name").value("Snapshot AUDIT-PRODUCT"));
+    } finally {
+      jdbc.execute("DROP TRIGGER reject_product_audit");
+    }
+    changeProduct(id, admin, catalogEdit(id, 20, false)).andExpect(status().isOk());
+    assertThat(count("product_change_audit")).isEqualTo(1);
+  }
+
+  @Test
+  void concurrentAdministratorsCannotOverwriteTheSameVersion() throws Exception {
+    String id = product("RACE-ADMIN", 10);
+    var first = catalogEdit(id, 20, true);
+    var second = catalogEdit(id, 30, true);
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    CountDownLatch start = new CountDownLatch(1);
+    try {
+      var a =
+          pool.submit(
+              () -> {
+                start.await();
+                return changeProduct(id, admin, first).andReturn().getResponse().getStatus();
+              });
+      var b =
+          pool.submit(
+              () -> {
+                start.await();
+                return changeProduct(id, admin, second).andReturn().getResponse().getStatus();
+              });
+      start.countDown();
+      assertThat(List.of(a.get(20, TimeUnit.SECONDS), b.get(20, TimeUnit.SECONDS)))
+          .containsExactlyInAnyOrder(200, 409);
+      assertThat(productVersion(id)).isEqualTo(1);
+      assertThat(count("product_change_audit")).isEqualTo(1);
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
+  void reservationAndDeactivationSerializeWithoutOversellingOrErasingReservations()
+      throws Exception {
+    String id = product("RACE-INVENTORY", 10);
+    var input = catalogEdit(id, 1, false);
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    CountDownLatch start = new CountDownLatch(1);
+    try {
+      var edit =
+          pool.submit(
+              () -> {
+                start.await();
+                return changeProduct(id, admin, input).andReturn().getResponse().getStatus();
+              });
+      var order =
+          pool.submit(
+              () -> {
+                start.await();
+                return reply(owner.token(), "admin-reserve-race", items(id, 2)).status();
+              });
+      start.countDown();
+      int edited = edit.get(20, TimeUnit.SECONDS), ordered = order.get(20, TimeUnit.SECONDS);
+      if (edited == 200) {
+        assertThat(ordered).isEqualTo(409);
+        stockIs(id, 1, 0);
+        nothingCommitted();
+      } else {
+        assertThat(edited).isEqualTo(409);
+        assertThat(ordered).isEqualTo(201);
+        stockIs(id, 10, 2);
+      }
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
+  void catalogAuditIsPaginatedAndOrderedByVersion() throws Exception {
+    String id = product("PAGED-AUDIT", 10);
+    changeProduct(id, admin, catalogEdit(id, 20, true)).andExpect(status().isOk());
+    changeProduct(id, admin, catalogEdit(id, 30, true)).andExpect(status().isOk());
+    mvc.perform(
+            get(catalogPath(id) + "/audit")
+                .param("size", "1")
+                .param("page", "1")
+                .header("Authorization", "Bearer " + admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.totalElements").value(2))
+        .andExpect(jsonPath("$.content.length()").value(1))
+        .andExpect(jsonPath("$.content[0].after.version").value(1));
+    mvc.perform(
+            get(catalogPath(id) + "/audit")
+                .param("size", "101")
+                .header("Authorization", "Bearer " + admin))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            get(catalogPath(UUID.randomUUID().toString()) + "/audit")
+                .header("Authorization", "Bearer " + admin))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void administrationValidatesRequiredFieldsAndDoesNotPermitDirectReservationAssignment()
+      throws Exception {
+    String id = product("INPUT-ADMIN", 10);
+    for (String field :
+        List.of("expectedVersion", "name", "amount", "currency", "onHand", "active", "reason")) {
+      var input = catalogEdit(id, 10, false);
+      input.remove(field);
+      changeProduct(id, admin, input).andExpect(status().isBadRequest());
+    }
+    var input = catalogEdit(id, 10, true);
+    input.put("reserved", 9);
+    input.put("sku", "FORGED");
+    changeProduct(id, admin, input)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.sku").value("INPUT-ADMIN"))
+        .andExpect(jsonPath("$.state.reserved").value(0));
+    assertThat(count("product_change_audit")).isEqualTo(1);
+  }
+
+  @Test
+  void multiProductOrderRollsBackEarlierReservationsWhenAnInactiveProductIsEncountered()
+      throws Exception {
+    String a = product("ACTIVE-BASKET", 10), b = product("INACTIVE-BASKET", 10);
+    var ids = new ArrayList<>(List.of(a, b));
+    Collections.sort(ids);
+    changeProduct(ids.get(1), admin, catalogEdit(ids.get(1), 10, false)).andExpect(status().isOk());
+    submit(owner.token(), "inactive-basket-key", List.of(item(ids.get(0), 2), item(ids.get(1), 2)))
+        .andExpect(status().isConflict());
+    stockIs(a, 10, 0);
+    stockIs(b, 10, 0);
+    nothingCommitted();
+    assertThat(count("message_dispatch")).isZero();
+    assertThat(count("order_operation_audit")).isZero();
+    assertThat(count("product_change_audit")).isEqualTo(1);
+  }
+
+  @Test
+  void paymentAndStockReconciliationCannotLoseConsumedUnits() throws Exception {
+    String id = product("RACE-PAYMENT", 10), order = newOrder(id, 2);
+    var input = catalogEdit(id, 20, true);
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    CountDownLatch start = new CountDownLatch(1);
+    try {
+      var edit =
+          pool.submit(
+              () -> {
+                start.await();
+                return changeProduct(id, admin, input).andReturn().getResponse().getStatus();
+              });
+      var paid =
+          pool.submit(
+              () -> {
+                start.await();
+                return payment(owner.token(), order, "admin-payment-race", "APPROVED")
+                    .andReturn()
+                    .getResponse()
+                    .getStatus();
+              });
+      start.countDown();
+      int edited = edit.get(20, TimeUnit.SECONDS);
+      assertThat(paid.get(20, TimeUnit.SECONDS)).isEqualTo(200);
+      if (edited == 200) {
+        stockIs(id, 18, 0);
+        assertThat(count("product_change_audit")).isEqualTo(1);
+      } else {
+        assertThat(edited).isEqualTo(409);
+        stockIs(id, 8, 0);
+        assertThat(count("product_change_audit")).isZero();
+      }
+    } finally {
+      pool.shutdownNow();
+    }
   }
 }

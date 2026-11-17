@@ -64,3 +64,13 @@ Expiry has no exact timing SLA, and leases require synchronized clocks across pu
 
 This checkpoint leaves identity/product administration, retention/cleanup, full advisory audit,
 load tests, production proxy/broker/Redis hardening and deployment explicitly deferred.
+
+## Catalog administration increment (in verification)
+
+- [x] ADMIN discovery, detail and version-precondition revision; no product deletion.
+- [x] Shared inventory row lock/version, absolute onHand/reserved invariant and inactive reservation guard.
+- [x] Transactional before/after audit, pagination and V6; V1-V5 preserved.
+- [x] 99 local unit tests passed; integration sources compiled.
+- [ ] Execute MySQL/Kafka/Redis integration and Compose HTTP administration smoke in CI.
+- [ ] Review and integrate the feature PR after validation.
+- [ ] Next: user administration, then operational maintenance/retention and presentation.

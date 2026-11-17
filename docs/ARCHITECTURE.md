@@ -68,3 +68,9 @@ Authorization precedes Redis admission; logout/reads remain available when write
 V5 starts order_operation_audit without invented history. Audit changes share the business transaction;
 transition counters run after commit. Redis stores no authoritative order/stock/idempotency state.
 See [ADR 6](adr/0006-admission-audit-metrics.md).
+
+## Catalog revisions
+V6 preserves V1-V5, adds products.active with an existing-data default and product_change_audit.
+[ADR 7](adr/0007-catalog-revisions.md) defines shared inventory locking/versioning, absolute balance
+preconditions, deactivation and atomic before/after audit. Existing snapshots remain immutable.
+Catalog administration is separate from deferred user lifecycle and warehouse/retention features.
