@@ -18,7 +18,11 @@ public class RedisRateLimiter {
           local limit = tonumber(ARGV[2])
           local ttl = redis.call('PTTL', KEYS[1])
           local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-          if current >= limit and ttl > 0 then
+          if current >= limit then
+            if ttl < 0 then
+              redis.call('PEXPIRE', KEYS[1], ARGV[1])
+              ttl = tonumber(ARGV[1])
+            end
             return {0, current, ttl}
           end
           current = redis.call('INCR', KEYS[1])

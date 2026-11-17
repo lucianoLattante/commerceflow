@@ -320,4 +320,15 @@ class RedisGuardIT {
             content()
                 .string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(ownerId))));
   }
+
+  @Test
+  void anExhaustedCounterWithoutATtlIsRepairedWithoutGrantingAnExtraRequest() {
+    String identity = UUID.randomUUID().toString();
+    String key = RedisRateLimiter.key(RateLimitSettings.Policy.WRITE, identity);
+    redis.opsForValue().set(key, "7");
+    assertThat(redis.getExpire(key, TimeUnit.MILLISECONDS)).isEqualTo(-1);
+    assertThat(limiter.acquire(RateLimitSettings.Policy.WRITE, identity).allowed()).isFalse();
+    assertThat(redis.getExpire(key, TimeUnit.MILLISECONDS)).isBetween(1L, 60000L);
+    assertThat(redis.opsForValue().get(key)).isEqualTo("7");
+  }
 }
