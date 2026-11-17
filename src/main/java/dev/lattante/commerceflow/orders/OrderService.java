@@ -17,13 +17,16 @@ public class OrderService {
   private final IdempotencyClaims claims;
   private final OrderEventSink events;
   private final Clock clock;
+  private final dev.lattante.commerceflow.operability.OrderOperationAudit audit;
 
   public OrderService(
       OrderRepository orders,
       InventoryReservation inventory,
       IdempotencyClaims claims,
       OrderEventSink events,
-      Clock clock) {
+      Clock clock,
+      dev.lattante.commerceflow.operability.OrderOperationAudit audit) {
+    this.audit = audit;
     this.orders = orders;
     this.inventory = inventory;
     this.claims = claims;
@@ -46,7 +49,9 @@ public class OrderService {
       BigDecimal total,
       Money.Currency currency,
       List<ItemView> items,
-      Instant createdAt, Instant expiresAt, Instant completedAt) {}
+      Instant createdAt,
+      Instant expiresAt,
+      Instant completedAt) {}
 
   public record Creation(OrderView order, boolean replayed) {}
 
@@ -55,7 +60,9 @@ public class OrderService {
       OrderStatus status,
       BigDecimal total,
       Money.Currency currency,
-      Instant createdAt, Instant expiresAt, Instant completedAt) {}
+      Instant createdAt,
+      Instant expiresAt,
+      Instant completedAt) {}
 
   public record OrderPage(List<Summary> content, int page, int size, long totalElements) {}
 
@@ -67,6 +74,11 @@ public class OrderService {
     var reserved = inventory.reserve(request.items());
     PurchaseOrder order = orders.saveAndFlush(PurchaseOrder.reserved(actor.id(), reserved, now));
     claims.complete(claim.requestId(), order.id());
+    audit.record(
+        order.id(),
+        actor.id(),
+        dev.lattante.commerceflow.operability.OrderOperationAudit.Action.ORDER_RESERVED,
+        now);
     events.orderReserved(
         new OrderEventSink.ReservedOrder(
             UUID.randomUUID(),
@@ -96,7 +108,16 @@ public class OrderService {
             : orders.findByCustomerIdAndStatus(actor.id(), status, pageable);
     return new OrderPage(
         result.getContent().stream()
-            .map(o -> new Summary(o.id(), o.status(), o.total(), o.currency(), o.createdAt(), o.expiresAt(), o.completedAt()))
+            .map(
+                o ->
+                    new Summary(
+                        o.id(),
+                        o.status(),
+                        o.total(),
+                        o.currency(),
+                        o.createdAt(),
+                        o.expiresAt(),
+                        o.completedAt()))
             .toList(),
         page,
         size,
@@ -118,6 +139,8 @@ public class OrderService {
         order.total(),
         order.currency(),
         order.itemViews(),
-        order.createdAt(), order.expiresAt(), order.completedAt());
+        order.createdAt(),
+        order.expiresAt(),
+        order.completedAt());
   }
 }

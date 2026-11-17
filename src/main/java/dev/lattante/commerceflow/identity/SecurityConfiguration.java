@@ -41,7 +41,13 @@ class SecurityConfiguration {
   }
 
   @Bean
-  SecurityFilterChain security(HttpSecurity http, IdentityService identity, ObjectMapper json)
+  SecurityFilterChain security(
+      HttpSecurity http,
+      IdentityService identity,
+      ObjectMapper json,
+      org.springframework.beans.factory.ObjectProvider<
+              dev.lattante.commerceflow.operability.RedisRateLimiter>
+          limiter)
       throws Exception {
     // Authentication exclusively uses an explicit Bearer header: no auth cookies, Basic or form
     // login.
@@ -69,11 +75,20 @@ class SecurityConfiguration {
                     .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.GET, "/actuator/prometheus")
                     .hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.POST, "/api/orders", "/api/orders/*/simulated-payment", "/api/orders/*/cancel")
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/orders",
+                        "/api/orders/*/simulated-payment",
+                        "/api/orders/*/cancel")
                     .authenticated()
-                    .requestMatchers("/api/admin/messaging/**")
+                    .requestMatchers("/api/admin/messaging/**", "/api/admin/operations/**")
                     .hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.GET, "/api/orders", "/api/orders/*", "/api/orders/*/projection")
+                    .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/orders",
+                        "/api/orders/*",
+                        "/api/orders/*/projection",
+                        "/api/orders/*/audit")
                     .authenticated()
                     .requestMatchers("/api/users/me", "/api/auth/logout")
                     .authenticated()
@@ -103,6 +118,11 @@ class SecurityConfiguration {
                         }))
         .addFilterBefore(
             new BearerTokenFilter(identity, json), UsernamePasswordAuthenticationFilter.class);
+    var activeLimiter = limiter.getIfAvailable();
+    if (activeLimiter != null)
+      http.addFilterAfter(
+          new dev.lattante.commerceflow.operability.RateLimitFilter(activeLimiter, json),
+          org.springframework.security.web.access.intercept.AuthorizationFilter.class);
     return http.build();
   }
 

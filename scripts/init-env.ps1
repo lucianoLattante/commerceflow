@@ -13,6 +13,7 @@ $lines = @(
     'CF_DB_USER=commerceflow',
     ('CF_DB_PASSWORD=' + (New-LocalSecret)),
     ('CF_DB_ROOT_PASSWORD=' + (New-LocalSecret)),
+    ('CF_REDIS_PASSWORD=' + (New-LocalSecret)),
     'CF_BOOTSTRAP_ADMIN_EMAIL=admin@example.test',
     ('CF_BOOTSTRAP_ADMIN_PASSWORD=' + (New-LocalSecret))
 )

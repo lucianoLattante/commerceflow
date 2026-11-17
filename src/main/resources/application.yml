@@ -5,6 +5,15 @@ spring:
     url: ${CF_DB_URL:jdbc:mysql://127.0.0.1:3306/commerceflow?connectionTimeZone=UTC}
     username: ${CF_DB_USER}
     password: ${CF_DB_PASSWORD}
+  data:
+    redis:
+      host: ${CF_REDIS_HOST:127.0.0.1}
+      port: ${CF_REDIS_PORT:6379}
+      password: ${CF_REDIS_PASSWORD:}
+      timeout: 500ms
+      connect-timeout: 500ms
+      repositories:
+        enabled: false
   jpa:
     open-in-view: false
     hibernate:
@@ -20,10 +29,14 @@ spring:
   flyway:
     enabled: true
 server:
+  forward-headers-strategy: none
   error:
     include-message: never
     include-stacktrace: never
 management:
+  health:
+    redis:
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -35,11 +48,13 @@ management:
         enabled: true
       group:
         readiness:
-          include: readinessState,db
+          include: readinessState,db,admission
 springdoc:
   swagger-ui:
     path: /docs
 commerceflow:
   token-lifetime: PT15M
+  rate-limit:
+    enabled: ${CF_RATE_LIMIT_ENABLED:false}
   messaging:
     enabled: ${CF_MESSAGING_ENABLED:false}

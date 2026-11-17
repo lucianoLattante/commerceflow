@@ -2,7 +2,7 @@
 
 Original Java 21 / Spring Boot modular monolith with explicit commit boundaries.
 Order creation, simulated lifecycle and durable Kafka projection/recovery are implemented and verified.
-Redis and expanded operability remain planned; no production deployment is claimed.
+Redis admission, transactional order audit and operational metrics are also verified. Deferred maintenance remains below; no production deployment is claimed.
 
 ## Verified increments
 
@@ -12,6 +12,7 @@ Redis and expanded operability remain planned; no production deployment is claim
 | CF-03 | Owned snapshots, sorted stock locks, scoped idempotency, atomic outbox | 54 unit + 55 MySQL tests; PR #2 |
 | CF-04 | Simulated payments, cancellation and 15 minute reservation expiry | 65 unit + 78 MySQL tests; PR #3; post-merge CI 43986864165 passed |
 | CF-05 | Leased Kafka dispatch, atomic inbox/projection, durable DLQ and audited recovery | 82 unit + 95 MySQL/Kafka tests; CI 43992169237; PR #4 |
+| CF-06 admission/audit | Atomic Redis admission, order audit, committed counters and queue metrics | 90 unit + 108 MySQL/Kafka/Redis tests; CI 44083936277; PR #5 |
 
 [Exact source commits, commands and limitations](docs/VERIFICATION.md).
 GitHub PR pages record integration state separately from test success.
@@ -30,19 +31,20 @@ GitHub PR pages record integration state separately from test success.
 - [x] Real MySQL/Kafka failure/concurrency/recovery tests and Compose HTTP projection smoke.
 - [x] Architecture, ADR 5, API contract, limits and interview demonstration.
 
-## Next — CF-06: operability and security follow-up
+## Delivered CF-06 checkpoint and remaining maintenance
 
-- [ ] Add justified Redis rate limiting/cache with observable fallback behavior.
-- [ ] Add operation audit beyond message recovery, lifecycle/outbox metrics and failure demonstrations.
-- [ ] Improve admin metadata queries, operator visibility, retention and poison-backlog handling.
+- [x] Add justified Redis admission with explicit outage behavior; no speculative product cache.
+- [x] Add order-operation audit beyond message recovery, committed transition/delivery/queue metrics and failure demonstrations.
+- [x] Make metadata-only admin queries avoid message payloads; expose audit pagination.
+- [ ] Extend operator visibility, retention and poison-backlog handling.
 - [ ] Extend concrete product/identity administration use cases.
 - [ ] Finish the reproducible demonstration and case study.
 
 ## Deferred identity maintenance
 
 Registration/login/self-profile/logout, explicit admin bootstrap and role-aware access are implemented.
-Full user/role administration, email verification/recovery, refresh tokens, token cleanup and login
-throttling remain deferred. No complete identity-lifecycle claim is made.
+Login/registration throttling is implemented. Full user/role administration, email verification/recovery,
+refresh tokens and token cleanup remain deferred. No complete identity-lifecycle claim is made.
 
 ## Known boundaries
 
@@ -50,3 +52,15 @@ Payments are synthetic. No real money/provider/refund, production Kafka ACL/TLS,
 resilience, complete dependency advisory audit, load benchmark or public deployment is verified.
 At-least-once messaging relies on inbox deduplication; no external exactly-once guarantee is claimed.
 Expiry has no exact timing SLA, and leases require synchronized clocks across publisher instances.
+
+## CF-06 executed checkpoint
+- [x] Redis Lua concurrency, true TTL expiry and orphaned exhausted-counter repair.
+- [x] Socket/actor identity boundaries, forwarding-header spoof resistance and authorization before quota.
+- [x] Redis pause/unpause with no order/claim/stock/audit writes during failed admission.
+- [x] Logout/read/metrics availability and readiness degradation during the outage.
+- [x] Audit rollback and after-commit counters; retries create no duplicate audit entries.
+- [x] 90 local unit tests; environment scripts preserve existing values; Compose config validated.
+- [x] CI 44083936277 passed 90 unit + 108 integration tests and complete Compose/HTTP checks.
+
+This checkpoint leaves identity/product administration, retention/cleanup, full advisory audit,
+load tests, production proxy/broker/Redis hardening and deployment explicitly deferred.

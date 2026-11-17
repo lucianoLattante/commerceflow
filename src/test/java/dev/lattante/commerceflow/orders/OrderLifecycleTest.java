@@ -18,9 +18,16 @@ class OrderLifecycleTest {
   private static final Instant CREATED = Instant.parse("2026-01-01T00:00:00.123456Z");
 
   private PurchaseOrder order() {
-    return PurchaseOrder.reserved("owner",
-        List.of(new ReservedItem(UUID.randomUUID(), "SKU", "Item",
-            new Money(new BigDecimal("12.34"), Money.Currency.USD), 2)), CREATED);
+    return PurchaseOrder.reserved(
+        "owner",
+        List.of(
+            new ReservedItem(
+                UUID.randomUUID(),
+                "SKU",
+                "Item",
+                new Money(new BigDecimal("12.34"), Money.Currency.USD),
+                2)),
+        CREATED);
   }
 
   @Test
@@ -38,20 +45,23 @@ class OrderLifecycleTest {
     var o = order();
     String key = OrderSubmission.keyHash("payment-key-01");
     o.pay(key, decision, CREATED.plusSeconds(10));
-    assertThat(o.status()).isEqualTo(decision == PaymentDecision.APPROVED
-        ? OrderStatus.PAID : OrderStatus.PAYMENT_DECLINED);
+    assertThat(o.status())
+        .isEqualTo(
+            decision == PaymentDecision.APPROVED ? OrderStatus.PAID : OrderStatus.PAYMENT_DECLINED);
     assertThat(o.total()).isEqualByComparingTo("24.68");
     assertThat(o.completedAt()).isEqualTo(CREATED.plusSeconds(10));
     assertThat(o.paymentReplay(key, decision)).isTrue();
     assertThatThrownBy(() -> o.paymentReplay(OrderSubmission.keyHash("different-key"), decision))
         .isInstanceOf(IdempotencyConflict.class);
-    PaymentDecision other = decision == PaymentDecision.APPROVED
-        ? PaymentDecision.DECLINED : PaymentDecision.APPROVED;
+    PaymentDecision other =
+        decision == PaymentDecision.APPROVED ? PaymentDecision.DECLINED : PaymentDecision.APPROVED;
     assertThatThrownBy(() -> o.paymentReplay(key, other)).isInstanceOf(IdempotencyConflict.class);
   }
 
   @ParameterizedTest
-  @EnumSource(value = OrderStatus.class, names = {"PAID", "PAYMENT_DECLINED", "CANCELLED", "EXPIRED"})
+  @EnumSource(
+      value = OrderStatus.class,
+      names = {"PAID", "PAYMENT_DECLINED", "CANCELLED", "EXPIRED"})
   void terminalOrdersCannotTransitionAgain(OrderStatus status) {
     var o = order();
     switch (status) {
@@ -64,8 +74,10 @@ class OrderLifecycleTest {
     var completed = o.completedAt();
     assertThatThrownBy(() -> o.pay("other", PaymentDecision.APPROVED, CREATED.plusSeconds(901)))
         .isInstanceOf(OrderStateConflict.class);
-    assertThatThrownBy(() -> o.cancel(CREATED.plusSeconds(901))).isInstanceOf(OrderStateConflict.class);
-    assertThatThrownBy(() -> o.expire(CREATED.plusSeconds(901))).isInstanceOf(OrderStateConflict.class);
+    assertThatThrownBy(() -> o.cancel(CREATED.plusSeconds(901)))
+        .isInstanceOf(OrderStateConflict.class);
+    assertThatThrownBy(() -> o.expire(CREATED.plusSeconds(901)))
+        .isInstanceOf(OrderStateConflict.class);
     assertThat(o.status()).isEqualTo(status);
     assertThat(o.completedAt()).isEqualTo(completed);
   }
@@ -95,8 +107,7 @@ class OrderLifecycleTest {
   @Test
   void expiryWorkerBoundsItsBatchAndContinuesAfterOneRolledBackOrder() {
     OrderLifecycleService service = mock(OrderLifecycleService.class);
-    when(service.dueCandidates())
-        .thenReturn(List.of("first", "failing", "last"));
+    when(service.dueCandidates()).thenReturn(List.of("first", "failing", "last"));
     when(service.expire("failing")).thenThrow(new IllegalStateException("synthetic"));
     var worker = new ReservationExpiryWorker(service);
     worker.expireDue();
@@ -108,8 +119,13 @@ class OrderLifecycleTest {
   @Test
   void expiryCandidateQueryIsBounded() {
     OrderRepository repository = mock(OrderRepository.class);
-    var service = new OrderLifecycleService(repository, mock(InventoryReservation.class),
-        mock(OrderEventSink.class), Clock.fixed(CREATED, ZoneOffset.UTC));
+    var service =
+        new OrderLifecycleService(
+            repository,
+            mock(InventoryReservation.class),
+            mock(OrderEventSink.class),
+            Clock.fixed(CREATED, ZoneOffset.UTC),
+            mock(dev.lattante.commerceflow.operability.OrderOperationAudit.class));
     service.dueCandidates();
     var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
     verify(repository).dueIds(eq(CREATED), page.capture());

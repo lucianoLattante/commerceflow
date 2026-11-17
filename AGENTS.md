@@ -19,3 +19,8 @@
 - Fence delivery updates with lease tokens. Preserve source sequence gates.
 - Inbox/projection and durable DLQ/transport recovery each require a single DB transaction.
 - Operator replay is ADMIN-only, bounded, idempotent, audited and cannot edit payloads.
+
+- Admission runs after authorization. Do not trust client forwarding headers or block logout.
+- Enabled admission fails closed on Redis errors. Redis does not hold authoritative order/stock state.
+- Order audit joins the business transaction; committed-transition metrics run only after commit.
+- Never put identities/credentials into metric labels. Unknown observations must not become false zeroes.
