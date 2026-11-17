@@ -28,5 +28,5 @@ Se implementaron consultas ADMIN y cambios de rol/activación con versión esper
 revocación de tokens en una transacción. Un bloqueo en MySQL conserva al menos un administrador
 activo; el login comparte el bloqueo del usuario para coordinar emisión y revocación. Promover o
 reactivar exige autenticarse nuevamente. El [contrato](docs/IDENTITY_ADMINISTRATION.md) documenta
-concurrencia, bootstrap y límites. Pasaron 108 unitarias locales; integración y Compose pendientes de CI.
+concurrencia, bootstrap y límites. Pasaron 108 unitarias locales y CI 44093544797 con 108 unitarias + 146 de integración MySQL/Kafka/Redis, sin fallos, errores ni omisiones. También pasaron Compose y los flujos HTTP de identidad.
 No se presenta como ciclo de identidad completo: recuperación/verificación, refresh y retención siguen pendientes.

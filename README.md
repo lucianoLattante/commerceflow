@@ -2,7 +2,7 @@
 
 Original commerce backend by Luciano Lattante. Built incrementally as a **modular monolith**, with Java 21, Spring Boot, MySQL and explicit domain invariants.
 
-**Current status: verified catalog administration, order lifecycle and operational recovery.** The order lifecycle now feeds a leased Kafka publisher and an idempotent asynchronous projection, with bounded retries, durable DLQ and audited ADMIN replay. No real payment/provider or public deployment is involved. CF-06 adds Redis-backed admission, transactional order audit and committed-operation metrics; the executed evidence is recorded below.
+**Current status: verified product/user administration, order lifecycle and operational recovery.** The order lifecycle now feeds a leased Kafka publisher and an idempotent asynchronous projection, with bounded retries, durable DLQ and audited ADMIN replay. No real payment/provider or public deployment is involved. CF-06 adds Redis-backed admission, transactional order audit and committed-operation metrics; the executed evidence is recorded below.
 
 [Order creation](docs/ORDERS.md) · [Payment, cancellation and expiry](docs/LIFECYCLE.md) · [Kafka, inbox and DLQ](docs/MESSAGING.md) · [Admission, audit and metrics](docs/OPERABILITY.md)
 
@@ -128,10 +128,10 @@ User administration is described below; retention remains deferred.
 Catalog checkpoint CI 44089250548 passed **99 unit + 123 MySQL/Kafka/Redis integration tests**,
 plus Compose startup and the actual HTTP flow. See [exact evidence](docs/VERIFICATION.md).
 
-## User administration increment
+## Verified user administration
 
 ADMIN directory and versioned role/activation updates now share an atomic state/token/audit commit.
 A database guard preserves the last active administrator; login issuance shares the target user lock.
 Promotion/reactivation require fresh authentication. See the [API and concurrency contract](docs/IDENTITY_ADMINISTRATION.md)
-and [ADR 8](docs/adr/0008-identity-administration.md). Local: 108 unit tests passed; real integration/Compose verification is pending CI.
+and [ADR 8](docs/adr/0008-identity-administration.md). CI 44093544797 passed **108 unit + 146 MySQL/Kafka/Redis integration tests**, with zero failures/errors/skips, plus Compose startup and actual HTTP identity flows.
 Email recovery/verification, refresh tokens and retention remain deferred.
