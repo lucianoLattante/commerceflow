@@ -327,3 +327,68 @@ will not restore a disabled/demoted configured account. Audit covers V7 administ
 excludes credential material and is append-only through the API rather than tamper-proof against
 DB operators. Email/password verification/recovery, MFA, refresh tokens, retention, full advisory
 audit, load capacity and production deployment remain deferred.
+
+## Bounded maintenance and local MVP handoff — 2026-11-17
+
+Verified runtime source: `a54620d820b057cde621e084a10249ab83d449dc`.
+[CI 44104045854](https://github.com/lucianoLattante/commerceflow/actions/runs/44104045854),
+job 134111456475, completed successfully.
+
+- 122 unit tests and 160 integration tests: zero failures/errors/skipped.
+- Integration: OperationalMaintenanceIT 14, UserAdministrationIT 23, OrderFlowIT 73,
+  CommerceFlowIT 24, SchemaUpgradeIT 1, KafkaDeliveryIT 16 and RedisGuardIT 9.
+- Compose configuration/build/startup/readiness/catalog and actual HTTP order/Kafka/catalog/
+  identity/maintenance/admission flows passed.
+- All seven released migrations are unchanged. No schema change or public deployment.
+
+New MySQL evidence covers exact expiry/microsecond boundaries, bounded deterministic batches, four
+concurrent workers, a separately locked row skipped and recovered, full rollback after a later
+per-key failure, next-tick recovery, outer-transaction rollback and after-commit metrics. Authentication
+rejects expired credentials before physical cleanup and retains live tokens. Cleanup preserves
+populated order/claim/outbox/inbox/projection/DLQ/operator/audit data and subsequent order/inbox replay
+still deduplicates. New operator endpoints enforce ADMIN, validate filters/bounds, expose reasons/
+budgets and select no payload/key/hash columns; opaque large-payload fixtures stay out of responses.
+
+CI runtime: Ubuntu 24.04, Temurin 21.0.13+9, Maven 3.10.0, Docker server 28.0.4,
+Compose v2.38.2. Existing dependencies/images were unchanged. Exact workflow commands:
+
+```bash
+java -version
+mvn -version
+docker version
+docker compose version
+mvn -B --no-transfer-progress verify
+docker compose config --quiet
+docker compose up -d --build --wait --wait-timeout 240
+curl --fail --silent --retry 30 --retry-all-errors --retry-delay 2 --max-time 5 http://localhost:8080/actuator/health/readiness
+curl --fail --silent http://localhost:8080/api/products
+python3 scripts/smoke-orders.py
+docker compose down --volumes
+```
+
+Local Windows: Oracle JDK 21.0.7 and Maven 3.9.0 through the Java/Plexus launcher with
+`-B --no-transfer-progress -Dmaven.repo.local=C:/workspace/maven-commerceflow test`.
+Initial test compilation failed on an ambiguous Clock wildcard import. The next run compiled but
+reported one error among 122 unit cases because a paging mock lacked an explicit Long count result.
+Both test-only fixtures were corrected; the final run passed all 122 with no failures/errors/skips.
+The private record retains exact commands, exit codes and the failed-attempt logs.
+
+Integration classes compiled locally but did not execute: Docker client 20.10.24 was present and the
+daemon pipe was unavailable. Standalone Compose 5.7.1 validated configuration with isolated generated
+credentials; no values were printed. Markdown targets and Python AST validation passed; these static
+checks are not runtime tests. No failed CI run occurred in this increment.
+
+The 137 working source blobs matched the actual feature branch. The preceding 125-file identity
+checkpoint remains unchanged; prior source copies are preserved. Only the upstream Git commit graph
+was used, without initializing a fictitious local history. A limited credential-pattern review of
+changed paths found no embedded live credentials; it is not a complete history or advisory scan.
+Follow-up handoff/evidence commits may change documentation only, preserving every runtime/test/
+migration/script/workflow/infrastructure blob. PR #8 records integration separately.
+The prior identity post-merge CI 44095184994 completed successfully.
+
+The local functional MVP handoff is [DEMO.md](DEMO.md): reproducible startup, HTTP flow, architecture,
+ADRs, failure demonstrations and interview narrative. This is local/CI evidence, not production
+readiness or a benchmark. Cleanup scheduling defaults off on host and on in Compose. Business replay/
+audit records remain retained; replay-safe archival/full retention, large-backlog cursor/index work,
+distributed trace export/correlation, production security/HA, capacity, identity recovery/MFA/refresh
+tokens and deployment remain explicitly deferred.

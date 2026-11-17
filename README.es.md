@@ -1,40 +1,81 @@
 # CommerceFlow
 
-Backend original de Luciano Lattante con Java 21, Spring Boot y MySQL, desarrollado como monolito modular.
+Backend original de Luciano Lattante con Java 21 y Spring Boot, desarrollado como **monolito modular**
+con MySQL, Kafka, Redis y límites explícitos entre módulos.
 
-**Primer incremento:** registro como CUSTOMER, autenticación bearer opaca con revocación, creación de productos por ADMIN, catálogo público con búsqueda/paginación, migraciones Flyway, errores, métricas y OpenAPI.
+**MVP local funcional verificado.** CI 44104045854 pasó **122 pruebas unitarias + 160 de integración
+MySQL/Kafka/Redis**, sin fallos, errores ni omisiones. También pasaron el arranque con Docker Compose
+y los flujos HTTP. La [evidencia](docs/VERIFICATION.md) identifica fuente, comandos, runtime y límites.
 
-El incremento de órdenes incluye snapshots, propiedad, reserva transaccional, idempotencia por usuario y persistencia de outbox. CF-04 agrega pagos simulados aprobados/rechazados, cancelación y vencimiento de reservas a los 15 minutos, con stock y evento en una transacción. El [ciclo de órdenes](docs/LIFECYCLE.md) explica reintentos, permisos y límites. CF-05 incorpora Kafka, publicación con leases/reintentos, inbox/proyección idempotente, DLQ durable y replay administrativo auditado. La verificación se registra en CI. CF-06 incorpora Redis para limitar login/registros/escrituras, auditoría transaccional de órdenes y métricas de operaciones confirmadas; su alcance está en [OPERABILITY.md](docs/OPERABILITY.md). La administración de usuarios se detalla abajo; la retención sigue pendiente. Ver [MESSAGING.md](docs/MESSAGING.md).
+## Funcionalidad implementada
 
-El [README principal](README.md) contiene los comandos reproducibles de Docker Compose y Maven, ejemplos de API, límites y documentación. El script scripts/init-env.ps1 genera credenciales locales aleatorias y no sobrescribe .env.
+- Registro CUSTOMER, login bearer opaco, logout y roles ADMIN/CUSTOMER.
+- Administración de usuarios con versión esperada, protección del último ADMIN activo y revocación/auditoría atómicas.
+- Catálogo público filtrado/paginado; creación, revisión y desactivación ADMIN sin perder reservas.
+- Órdenes propias con snapshots, dinero decimal y moneda explícita.
+- Reserva concurrente de inventario, idempotencia por usuario y transactional outbox.
+- Pagos simulados, cancelación y vencimiento con transición/stock/evento en una transacción.
+- Kafka con leases, reintentos acotados, inbox idempotente, DLQ durable y recuperación ADMIN auditada.
+- Admisión Redis con comportamiento de fallo explícito; MySQL conserva la autoridad sobre stock y órdenes.
+- Auditorías, métricas y páginas administrativas que no leen payloads.
+- Limpieza por lotes de tokens vencidos, preservando evidencia de negocio, replay e idempotencia.
 
-En el incremento anterior se ejecutaron 54 pruebas unitarias con Java 21.0.7 y Maven 3.9.0. Las pruebas MySQL/Testcontainers necesitan Docker y se verifican en CI; su resultado debe consultarse en la ejecución correspondiente. CF-04 pasó en CI: 65 pruebas unitarias y 78 de integración MySQL, sin fallos, errores ni pruebas omitidas; también pasó el flujo HTTP con Docker Compose. La evidencia exacta está en [VERIFICATION.md](docs/VERIFICATION.md). No se ejecutaron nuevas pruebas locales mientras la PC estuvo desconectada. No hay dinero real ni despliegue público.
+## Ejecutar localmente
 
-CF-05 pasó en CI: **82 pruebas unitarias y 95 de integración MySQL/Kafka**, sin fallos, errores ni pruebas omitidas. Docker Compose y el flujo HTTP también verificaron las proyecciones asíncronas. La ejecución exacta está en [VERIFICATION.md](docs/VERIFICATION.md).
+Requisitos: Docker Engine con Compose. Para compilar en host: Java 21 y Maven 3.6.3+.
 
-CF-06 pasó localmente 90 pruebas unitarias y en CI 90 unitarias + 108 de integración MySQL/Kafka/Redis, sin fallos, errores ni omisiones. También pasaron Docker Compose y el flujo HTTP de auditoría/admisión. Se preservó la copia local anterior y se preparó una fuente de trabajo nueva del main verificado.
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/init-env.ps1
+docker compose up --build
+```
 
-## Administración del catálogo
+El script genera credenciales aleatorias en .env sin sobrescribir archivos existentes. Si un entorno
+anterior no tiene contraseña Redis independiente, usar scripts/add-redis-env.ps1. No se incluyen
+credenciales predeterminadas. Los servicios escuchan en loopback; usar una base local aislada.
 
-El nuevo incremento permite editar, desactivar/reactivar y reconciliar existencias con versión esperada,
-bloqueo compartido con las reservas y auditoría en la misma transacción. Conserva precios de órdenes ya
-creadas y permite finalizar sus reservas aunque el producto esté inactivo. El [contrato de API](docs/CATALOG_ADMINISTRATION.md)
-explica los conflictos y reintentos; no se presenta como administración de usuarios ni libro de inventario.
-Verificación: 99 pruebas unitarias locales y CI 44089250548 con 99 unitarias + 123 de integración MySQL/Kafka/Redis, sin fallos, errores ni omisiones. Docker Compose y el flujo HTTP de administración también pasaron. La evidencia exacta está en [VERIFICATION.md](docs/VERIFICATION.md).
+- API: <http://localhost:8080>
+- OpenAPI: <http://localhost:8080/docs>
+- Readiness: <http://localhost:8080/actuator/health/readiness>
 
-## Administración de usuarios
+El .env de Compose no se carga automáticamente al ejecutar Maven en host: exportar las variables
+CF_* correspondientes. La limpieza de tokens está habilitada en Compose y deshabilitada por defecto
+en host; sus límites/configuración están en [RETENTION.md](docs/RETENTION.md).
+docker compose down conserva los volúmenes; eliminarlos borra los datos locales.
 
-Se implementaron consultas ADMIN y cambios de rol/activación con versión esperada, auditoría y
-revocación de tokens en una transacción. Un bloqueo en MySQL conserva al menos un administrador
-activo; el login comparte el bloqueo del usuario para coordinar emisión y revocación. Promover o
-reactivar exige autenticarse nuevamente. El [contrato](docs/IDENTITY_ADMINISTRATION.md) documenta
-concurrencia, bootstrap y límites. Pasaron 108 unitarias locales y CI 44093544797 con 108 unitarias + 146 de integración MySQL/Kafka/Redis, sin fallos, errores ni omisiones. También pasaron Compose y los flujos HTTP de identidad.
-No se presenta como ciclo de identidad completo: recuperación/verificación, refresh y retención siguen pendientes.
+## Pruebas y presentación
 
-## Mantenimiento y demostración del MVP
+```bash
+mvn test
+mvn verify
+```
 
-Compose habilita limpieza por lotes de tokens vencidos; en host está desactivada por defecto.
-Se preservan credenciales vigentes, órdenes, claves de idempotencia, inbox y auditorías. Hay consultas
-ADMIN de estado agregado y páginas de entregas/DLQ que no leen payloads. Ver [retención](docs/RETENTION.md),
-[ADR 9](docs/adr/0009-bounded-maintenance.md) y [demo reproducible](docs/DEMO.md).
-Pasaron 122 unitarias locales; integración y Compose/HTTP de este incremento pendientes de CI.
+test ejecuta pruebas unitarias sin base de datos. verify agrega Testcontainers y requiere un daemon
+Docker funcional; no omite silenciosamente la integración. Localmente pasaron 122 unitarias con
+Oracle JDK 21.0.7/Maven 3.9.0. La integración y el flujo Compose se ejecutaron en CI.
+
+La [demo reproducible](docs/DEMO.md) explica qué mostrar en entrevista y cómo observar cada garantía.
+scripts/smoke-orders.py usa fixtures y credenciales de prueba contra loopback: ejecutarlo únicamente
+en una instancia/base descartable. CI aporta valores sintéticos.
+
+## Documentación técnica
+
+| Tema | Contrato |
+| --- | --- |
+| Arquitectura y dominio | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Creación de órdenes | [ORDERS.md](docs/ORDERS.md) |
+| Pago, cancelación y vencimiento | [LIFECYCLE.md](docs/LIFECYCLE.md) |
+| Kafka, inbox, DLQ y recuperación | [MESSAGING.md](docs/MESSAGING.md) |
+| Admisión, auditoría y métricas | [OPERABILITY.md](docs/OPERABILITY.md) |
+| Administración de productos | [CATALOG_ADMINISTRATION.md](docs/CATALOG_ADMINISTRATION.md) |
+| Administración de usuarios | [IDENTITY_ADMINISTRATION.md](docs/IDENTITY_ADMINISTRATION.md) |
+| Retención y mantenimiento | [RETENTION.md](docs/RETENTION.md) |
+| Caso de estudio y preguntas | [CASE_STUDY.md](docs/CASE_STUDY.md) |
+| Decisiones y tradeoffs | [ADRs](docs/adr) |
+
+## Límites
+
+Los pagos son simulados. La entrega de eventos es al menos una vez; no se promete exactly-once externo.
+No hay despliegue público, métricas de capacidad ni código/datos del empleador.
+Recuperación/verificación de identidad, MFA/refresh tokens, retención completa con archival seguro,
+trazas distribuidas, hardening/HA productivos y benchmarks siguen pendientes.
+El [README en inglés](README.md) desarrolla ejemplos de API y alcance.
