@@ -43,8 +43,8 @@ GitHub PR pages record integration state separately from test success.
 ## Deferred identity maintenance
 
 Registration/login/self-profile/logout, explicit admin bootstrap and role-aware access are implemented.
-Full user/role administration, email verification/recovery, refresh tokens, token cleanup and login
-throttling is implemented; the other identity lifecycle items remain deferred. No complete identity-lifecycle claim is made.
+Login/registration throttling is implemented. Full user/role administration, email verification/recovery,
+refresh tokens and token cleanup remain deferred. No complete identity-lifecycle claim is made.
 
 ## Known boundaries
 
