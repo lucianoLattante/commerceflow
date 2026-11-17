@@ -869,4 +869,25 @@ class OrderFlowIT {
     stockIs(b, 16, 0);
     assertThat(count("outbox_events")).isEqualTo(16);
   }
+
+  @Test
+  void expiryQuerySelectsOnlyDueReservationsInStableBoundedOrder() throws Exception {
+    String product = product("A", 200);
+    List<String> due = new ArrayList<>();
+    // Populate through the real creation API to retain all domain invariants and FK data.
+    for (int i=0; i<102; i++) {
+      String id = newOrder(product, 1);
+      due.add(id);
+      dueNow(id);
+    }
+    String future = newOrder(product, 1);
+    String cancelled = newOrder(product, 1);
+    cancel(owner.token(), cancelled).andExpect(status().isOk());
+    due.sort(String::compareTo); // identical deadlines in the controlled clock
+    assertThat(lifecycle.dueCandidates()).containsExactlyElementsOf(due.subList(0, 100));
+    assertThat(lifecycle.expire(due.getFirst())).isTrue();
+    assertThat(lifecycle.dueCandidates()).hasSize(100)
+        .doesNotContain(due.getFirst(), future, cancelled);
+    stockIs(product, 200, 102); // 101 remaining due + one future; cancellation/expiry released
+  }
 }

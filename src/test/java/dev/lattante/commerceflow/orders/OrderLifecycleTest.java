@@ -94,16 +94,23 @@ class OrderLifecycleTest {
 
   @Test
   void expiryWorkerBoundsItsBatchAndContinuesAfterOneRolledBackOrder() {
-    OrderRepository repository = mock(OrderRepository.class);
     OrderLifecycleService service = mock(OrderLifecycleService.class);
-    when(repository.dueIds(eq(CREATED), any(Pageable.class)))
+    when(service.dueCandidates())
         .thenReturn(List.of("first", "failing", "last"));
     when(service.expire("failing")).thenThrow(new IllegalStateException("synthetic"));
-    var worker = new ReservationExpiryWorker(repository, service, Clock.fixed(CREATED, ZoneOffset.UTC));
+    var worker = new ReservationExpiryWorker(service);
     worker.expireDue();
     verify(service).expire("first");
     verify(service).expire("failing");
     verify(service).expire("last");
+  }
+
+  @Test
+  void expiryCandidateQueryIsBounded() {
+    OrderRepository repository = mock(OrderRepository.class);
+    var service = new OrderLifecycleService(repository, mock(InventoryReservation.class),
+        mock(OrderEventSink.class), Clock.fixed(CREATED, ZoneOffset.UTC));
+    service.dueCandidates();
     var page = org.mockito.ArgumentCaptor.forClass(Pageable.class);
     verify(repository).dueIds(eq(CREATED), page.capture());
     assertThat(page.getValue().getPageSize()).isEqualTo(100);

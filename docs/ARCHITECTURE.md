@@ -8,6 +8,7 @@ flowchart TD
   Security --> Identity["Identity"]
   Security --> Catalog["Catalog"]
   Security --> Orders["Orders"]
+  Expiry["Bounded expiry worker"] --> Orders
   Orders --> Inventory["Inventory reservation API"]
   Orders --> Outbox["Transactional outbox adapter"]
   Inventory --> DB["MySQL"]
@@ -24,12 +25,12 @@ All modules run in one JVM with one database and transaction manager. The invent
 | app_users | Normalized unique email, BCrypt hash, role and active state |
 | access_tokens | Token digest, user foreign key and expiry |
 | products | Unique SKU, decimal money, available/reserved stock and version |
-| customer_orders | Authenticated owner, RESERVED state, currency/total and creation time |
+| customer_orders | Owner, terminal state machine, creation/deadline/completion times, digest-only simulated payment metadata |
 | order_lines | Immutable product/name/price/quantity snapshots with line-total constraints |
 | idempotency_requests | Unique customer/key digest, normalized request hash, linked order |
-| outbox_events | Durable versioned ORDER_RESERVED JSON and unpublished marker |
+| outbox_events | Durable versioned reservation/completion JSON and unpublished marker |
 
-V1 is unchanged. V2 adds the order-side tables and foreign keys without replacing existing identity/catalog data.
+V1 and V2 are unchanged. V3 extends order states and outbox types, adds payment metadata and backfills existing reservation deadlines; see [ADR 4](adr/0004-order-lifecycle.md).
 
 ## Transactions and concurrency
 
@@ -37,14 +38,16 @@ V1 is unchanged. V2 adds the order-side tables and foreign keys without replacin
 
 JpaTransactionManager coordinates JPA and JdbcTemplate on the same DataSource. Inventory, claim and outbox adapters require that transaction. A runtime failure rolls back all effects, including earlier flushed writes. Database deadlocks are still possible; transient database errors expose a retryable 503 instead of pretending success.
 
-Order reads enforce ownership in the application service. ADMIN may read a specific order; lists always contain only the caller's orders. Summaries do not eagerly fetch every line collection.
+Lifecycle transactions lock the order first, read time after the lock, then consume or release inventory in fixed product order. State, stock, simulated payment outcome and completion outbox share a commit boundary. The worker processes at most 100 due IDs per scan, with a separate transaction for each ID.
+
+Order reads enforce ownership in the application service. ADMIN may read a specific order; lists always contain only the caller's orders. Summaries do not eagerly fetch every line collection. Lifecycle writes are owner-only, including against ADMIN tokens.
 
 ## Testing boundaries
 
 Unit tests cover money, stock, canonical request fingerprints and order totals/snapshots. MySQL/Testcontainers tests cover migration/schema, HTTP authorization, scoped retries, actual concurrent reservations and rollback after an injected outbox insertion failure.
 
-SchemaUpgradeIT verifies that applying V2 after populated V1 preserves identity/catalog records. A loopback-only Python smoke script exercises the actual Compose application's order/replay endpoints. Runtime evidence must come from executed CI, not compilation.
+SchemaUpgradeIT populates V1 identity/catalog, applies V2 and creates an existing reserved order, then verifies preservation and its backfilled lease after V3. A loopback-only Python smoke script exercises actual order, payment/replay, cancellation/replay and decline endpoints. Runtime evidence must come from executed CI, not compilation.
 
 ## Current limits
 
-Only creation into RESERVED is implemented. No stock consumption/release transition, expiry job, payment processing, Kafka publisher/consumer, Redis, audit trail, load benchmark or public deployment is claimed.
+The local simulated lifecycle is implemented; see [LIFECYCLE.md](LIFECYCLE.md). No real payment provider/refunds, Kafka publisher/consumer, Redis, complete audit trail, load benchmark or public deployment is claimed. Expiry scans are bounded and have no exact timing SLA.

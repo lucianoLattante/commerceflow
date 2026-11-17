@@ -26,3 +26,11 @@ Runtime-source commit b91b4cbf1df9b58856f28de266fb4c1325974186, [CI 43932466541]
 Docker Compose built and started the actual application; readiness, catalog and scripts/smoke-orders.py passed over network HTTP. Timestamps are canonicalized to TIMESTAMP(6) precision. The trigger-permission setting is test-container-only; runtime Compose was not relaxed.
 
 Earlier runs exposed and corrected timestamp precision, disposable trigger setup and a lowercase smoke SKU. Payment/cancel/expiry and Kafka publication remain pending.
+
+## CF-04 verification in progress
+
+Feature branch: feat/order-lifecycle, PR #3. The prior order-creation counts above remain historical.
+The PC execution environment became unavailable during this increment; no new local tests are claimed.
+GitHub Actions runs Maven verify on Java 21 / Ubuntu 24.04 with disposable MySQL 8.4.11, then
+Compose configuration/build/readiness checks and the expanded network HTTP smoke.
+Final run IDs, counts, failures and limitations will be recorded after execution.

@@ -4,7 +4,7 @@ Original commerce backend by Luciano Lattante. Built incrementally as a **modula
 
 **Current status: order lifecycle increment under verification.** Owned orders, transactional reservation, simulated payment, cancellation and reservation expiry are implemented in this branch. No real money or external payment provider is used. Kafka delivery and Redis remain subsequent increments; the distributed-processing MVP is not complete.
 
-[Order API and transaction](docs/ORDERS.md)
+[Order creation](docs/ORDERS.md) · [Payment, cancellation and expiry](docs/LIFECYCLE.md)
 
 [Español](README.es.md) · [Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/adr/0001-modular-monolith.md) · [Roadmap](ROADMAP.md)
 
@@ -105,6 +105,7 @@ The unit result alone is not evidence of MySQL concurrency or rollback. OrderFlo
 - [Architecture and domain](docs/ARCHITECTURE.md)
 - [ADR 1: modular monolith](docs/adr/0001-modular-monolith.md)
 - [ADR 2: opaque bearer credentials](docs/adr/0002-opaque-tokens.md)
+- [ADR 4: order lifecycle](docs/adr/0004-order-lifecycle.md)
 - [Case study and interview discussion](docs/CASE_STUDY.md)
 
 The repository contains original portfolio code, with no employer source or production data.

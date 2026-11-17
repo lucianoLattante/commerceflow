@@ -57,6 +57,12 @@ public class OrderLifecycleService {
     return OrderService.view(order);
   }
 
+  /** Internal bounded candidate query; callers must recheck every ID under the order lock. */
+  @Transactional(readOnly = true)
+  public List<String> dueCandidates() {
+    return orders.dueIds(now(), org.springframework.data.domain.PageRequest.of(0, 100));
+  }
+
   /** Called once per transaction by a separate worker; never exposed as a public HTTP endpoint. */
   @Transactional(isolation = Isolation.READ_COMMITTED)
   public boolean expire(String id) {
