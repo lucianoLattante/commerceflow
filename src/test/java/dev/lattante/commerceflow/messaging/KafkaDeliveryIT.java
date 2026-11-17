@@ -413,7 +413,15 @@ class KafkaDeliveryIT {
     List<String> ids=new ArrayList<>();for(int i=0;i<8;i++)ids.add(order());
     try(var pool=Executors.newFixedThreadPool(8)){
       CountDownLatch start=new CountDownLatch(1);List<Future<Boolean>> work=new ArrayList<>();
-      for(int i=0;i<8;i++)work.add(pool.submit(()->{start.await();return dispatcher.dispatchOnce();}));
+      for(int i=0;i<8;i++)work.add(pool.submit(()->{
+        start.await();
+        // SKIP LOCKED can temporarily report no claimable row while another scan holds locks.
+        for(int retry=0;retry<100;retry++){
+          if(dispatcher.dispatchOnce())return true;
+          Thread.sleep(25);
+        }
+        return false;
+      }));
       start.countDown();
       for(var result:work)assertThat(result.get(20,TimeUnit.SECONDS)).isTrue();
     }
