@@ -81,6 +81,8 @@ class KafkaDeliveryIT {
 
   @BeforeEach void clean() throws Exception {
     registry.getListenerContainer("order-projection").stop();
+    // Test-only isolation before deleting DB state: retain no records from the preceding case.
+    isolateBrokerOffsets();
     for(String trigger:List.of("reject_projection","reject_sent","reject_enqueue"))
       jdbc.execute("DROP TRIGGER IF EXISTS "+trigger);
     for(String table:List.of("message_operator_requests","message_dispatch","message_dead_letters",
@@ -100,6 +102,30 @@ class KafkaDeliveryIT {
     });
   }
   @AfterEach void stop(){registry.getListenerContainer("order-projection").stop();}
+
+  private void isolateBrokerOffsets() throws Exception {
+    try(var brokerAdmin=org.apache.kafka.clients.admin.Admin.create(
+        Map.of("bootstrap.servers",KAFKA.getBootstrapServers()))){
+      Map<TopicPartition,org.apache.kafka.clients.admin.OffsetSpec> requested=new HashMap<>();
+      for(int i=0;i<3;i++)requested.put(new TopicPartition(OrderMessageCodec.TOPIC,i),
+          org.apache.kafka.clients.admin.OffsetSpec.latest());
+      var ends=brokerAdmin.listOffsets(requested).all().get(10,TimeUnit.SECONDS);
+      if(ends.values().stream().anyMatch(v->v.offset()>0)){
+        Map<TopicPartition,OffsetAndMetadata> offsets=new HashMap<>();
+        ends.forEach((partition,offset)->offsets.put(partition,new OffsetAndMetadata(offset.offset())));
+        brokerAdmin.alterConsumerGroupOffsets("commerceflow-order-projection-v1",offsets)
+            .all().get(10,TimeUnit.SECONDS);
+      }
+    }
+  }
+  private long committedOffset(TopicPartition partition) throws Exception {
+    try(var brokerAdmin=org.apache.kafka.clients.admin.Admin.create(
+        Map.of("bootstrap.servers",KAFKA.getBootstrapServers()))){
+      var offsets=brokerAdmin.listConsumerGroupOffsets("commerceflow-order-projection-v1")
+          .partitionsToOffsetAndMetadata().get(10,TimeUnit.SECONDS);
+      return offsets.containsKey(partition)?offsets.get(partition).offset():0;
+    }
+  }
 
   private void eventually(BooleanSupplier condition) throws Exception {
     long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(25);
@@ -293,15 +319,24 @@ class KafkaDeliveryIT {
   @Test void dlqCaptureAndItsTransportOutboxRollbackTogetherAndOffsetIsRetried() throws Exception {
     jdbc.execute("CREATE TRIGGER reject_enqueue BEFORE INSERT ON message_dispatch FOR EACH ROW"
         +" SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected DLQ enqueue failure'");
+    org.apache.kafka.clients.producer.RecordMetadata poison;
     try{
-      kafka.send(OrderMessageCodec.TOPIC,UUID.randomUUID().toString(),"poison-fixture").get(10,TimeUnit.SECONDS);
+      poison=kafka.send(OrderMessageCodec.TOPIC,UUID.randomUUID().toString(),"poison-fixture")
+          .get(10,TimeUnit.SECONDS).getRecordMetadata();
       eventually(()->org.mockito.Mockito.mockingDetails(deadLetters).getInvocations().stream()
           .anyMatch(i->i.getMethod().getName().equals("capture")));
       assertThat(count("message_dead_letters")).isZero();
       assertThat(count("message_dispatch")).isZero();
+      assertThat(committedOffset(new TopicPartition(poison.topic(),poison.partition())))
+          .isLessThanOrEqualTo(poison.offset());
     } finally {jdbc.execute("DROP TRIGGER reject_enqueue");}
     eventually(()->count("message_dead_letters")==1);
     assertThat(count("message_dispatch")).isEqualTo(1);
+    final var recovered=poison;
+    eventually(()->{
+      try{return committedOffset(new TopicPartition(recovered.topic(),recovered.partition()))>recovered.offset();}
+      catch(Exception e){throw new IllegalStateException(e);}
+    });
     drain();
   }
 
