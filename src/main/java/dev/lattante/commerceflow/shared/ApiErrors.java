@@ -64,6 +64,11 @@ public class ApiErrors {
     return problem(HttpStatus.CONFLICT, "product_conflict", e.getMessage());
   }
 
+  @ExceptionHandler(dev.lattante.commerceflow.identity.UserStateConflict.class)
+  ProblemDetail userStateConflict(dev.lattante.commerceflow.identity.UserStateConflict e) {
+    return problem(HttpStatus.CONFLICT, "user_state_conflict", e.getMessage());
+  }
+
   @ExceptionHandler(DomainViolation.class)
   ProblemDetail domain(DomainViolation e) {
     return problem(HttpStatus.BAD_REQUEST, "invalid_request", e.getMessage());

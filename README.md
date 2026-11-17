@@ -123,7 +123,15 @@ ADMIN can discover inactive products and revise name, price/currency, active sta
 stock using an expected version. Existing order snapshots and reservations are preserved. Actor-attributed
 before/after audit shares the product transaction. See the [API and retry contract](docs/CATALOG_ADMINISTRATION.md)
 and [ADR 7](docs/adr/0007-catalog-revisions.md). Executed validation is tracked in [VERIFICATION.md](docs/VERIFICATION.md).
-User administration and retention remain deferred.
+User administration is described below; retention remains deferred.
 
 Catalog checkpoint CI 44089250548 passed **99 unit + 123 MySQL/Kafka/Redis integration tests**,
 plus Compose startup and the actual HTTP flow. See [exact evidence](docs/VERIFICATION.md).
+
+## User administration increment
+
+ADMIN directory and versioned role/activation updates now share an atomic state/token/audit commit.
+A database guard preserves the last active administrator; login issuance shares the target user lock.
+Promotion/reactivation require fresh authentication. See the [API and concurrency contract](docs/IDENTITY_ADMINISTRATION.md)
+and [ADR 8](docs/adr/0008-identity-administration.md). Local: 108 unit tests passed; real integration/Compose verification is pending CI.
+Email recovery/verification, refresh tokens and retention remain deferred.

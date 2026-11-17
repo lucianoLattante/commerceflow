@@ -74,3 +74,9 @@ V6 preserves V1-V5, adds products.active with an existing-data default and produ
 [ADR 7](adr/0007-catalog-revisions.md) defines shared inventory locking/versioning, absolute balance
 preconditions, deactivation and atomic before/after audit. Existing snapshots remain immutable.
 Catalog administration is separate from deferred user lifecycle and warehouse/retention features.
+
+## Administrative identity state
+V7 preserves V1-V6 and existing tokens, adds user versions, a singleton membership guard and
+credential-free user_admin_audit. [ADR 8](adr/0008-identity-administration.md) defines last-admin
+protection, operator revalidation, login issuance locking and atomic token revocation/audit.
+The API can change role/active state; it cannot replace identity/credentials or delete users.

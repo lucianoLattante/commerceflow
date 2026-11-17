@@ -35,6 +35,8 @@ public class AppUser {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
+  @Version private long version;
+
   protected AppUser() {}
 
   public AppUser(String email, String passwordHash, Role role, Instant now) {
@@ -60,6 +62,21 @@ public class AppUser {
 
   public Role getRole() {
     return role;
+  }
+
+  public long getVersion() {
+    return version;
+  }
+
+  public Instant getCreatedAt() {
+    return createdAt;
+  }
+
+  void changeState(UserStateChange change) {
+    if (version != change.expectedVersion())
+      throw new UserStateConflict("User changed; read the current version and reconcile");
+    role = change.role();
+    active = change.active();
   }
 
   public boolean isActive() {

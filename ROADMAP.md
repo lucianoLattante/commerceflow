@@ -75,3 +75,14 @@ load tests, production proxy/broker/Redis hardening and deployment explicitly de
 - [x] CI 44089250548 passed 99 unit + 123 MySQL/Kafka/Redis integration tests and Compose HTTP administration smoke.
 - [x] Review changed paths, released migrations, source hashes and runtime evidence; PR #6 records integration state.
 - [ ] Next: user administration, then operational maintenance/retention and presentation.
+
+## User administration increment (in verification)
+
+- [x] ADMIN directory/filter/detail and versioned role/activation revisions.
+- [x] Shared membership guard, persisted-operator revalidation and last-active-admin protection.
+- [x] Serialized login issuance, atomic target-token revocation and before/after audit.
+- [x] V7 preserving existing users/tokens; V1-V6 unchanged.
+- [x] 108 local unit tests passed; integration sources compiled.
+- [ ] Execute full MySQL/Kafka/Redis integration and actual HTTP identity smoke in CI.
+- [ ] Review and integrate the feature PR after validation.
+- [ ] Next: retention/cleanup, operational visibility and final presentation.

@@ -89,3 +89,17 @@ rolling back together. Use only the scenarios whose linked integration run passe
 30. How can an inactive product still require payment, release and expiry behavior?
 31. Why flush before auditing, and why is a flushed write still reversible before commit?
 32. What would relative stock deltas require to make retries safe?
+
+## Identity administration demonstration
+Use two ADMIN accounts to attempt simultaneous self-disables; exactly one should commit.
+Then promote a CUSTOMER, show its old token rejected and authenticate again for ADMIN access.
+In the disposable MySQL tests, hold credential verification during login and start a disable;
+revocation must wait for issuance and remove its new token. Finally reject audit insertion and
+show role/version and tokens rolling back together. Present only scenarios backed by a passed run.
+
+33. Why does a count plus target-row lock fail to preserve the last administrator across two targets?
+34. Why revalidate the operator after the membership guard rather than trust its authenticated principal?
+35. How can token deletion race with credential verification and a later insert?
+36. Why revoke credentials on promotion and reactivation as well as disable/demotion?
+37. Which requests can still finish after revocation, and which guarantee does the guard actually provide?
+38. Why should bootstrap reject a disabled configured account instead of silently restoring it?

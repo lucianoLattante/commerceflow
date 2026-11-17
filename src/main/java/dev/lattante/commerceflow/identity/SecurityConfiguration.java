@@ -84,7 +84,9 @@ class SecurityConfiguration {
                     .requestMatchers(
                         "/api/admin/messaging/**",
                         "/api/admin/operations/**",
-                        "/api/admin/catalog/**")
+                        "/api/admin/catalog/**",
+                        "/api/admin/users",
+                        "/api/admin/users/**")
                     .hasRole("ADMIN")
                     .requestMatchers(
                         HttpMethod.GET,
