@@ -1,0 +1,54 @@
+{
+  "checkpoint": "CF-04",
+  "dateArgentina": "2026-11-16",
+  "sourceCommit": "3bbf48617ec2d49629cf1a2eeb9fda6709655c0e",
+  "runId": 43985895558,
+  "jobId": 133713821358,
+  "url": "https://github.com/lucianoLattante/commerceflow/actions/runs/43985895558",
+  "conclusion": "success",
+  "unit": {
+    "tests": 65,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "integration": {
+    "tests": 78,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "classes": {
+      "OrderFlowIT": 53,
+      "CommerceFlowIT": 24,
+      "SchemaUpgradeIT": 1
+    }
+  },
+  "compose": {
+    "config": "passed",
+    "buildAndStartup": "passed",
+    "healthAndCatalog": "passed",
+    "networkLifecycleSmoke": "passed",
+    "deployment": false
+  },
+  "runtime": {
+    "os": "ubuntu-24.04",
+    "java": "Temurin 21.0.13+9",
+    "mysql": "8.4.11",
+    "testcontainers": "2.0.5",
+    "dockerServer": "28.0.4",
+    "hostMaven": "runner-provided; version not printed by workflow",
+    "dockerBuilder": "maven:3.9.11-eclipse-temurin-21"
+  },
+  "localExecution": {
+    "performed": false,
+    "reason": "Workstation execution environment unavailable"
+  },
+  "knownLimits": [
+    "No real provider or money",
+    "No Kafka/Redis/deployment",
+    "No full dependency advisory audit or load benchmark",
+    "Wall-clock scheduling timing not tested end-to-end",
+    "Flyway MySQL-version support warning remains",
+    "Bounded oldest-first expiry needs future operator handling for persistently failing batches"
+  ]
+}
