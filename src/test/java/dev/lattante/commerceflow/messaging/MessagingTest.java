@@ -68,4 +68,12 @@ class MessagingTest {
     verify(sender).send("topic","key","payload");
     verify(store,never()).failed(any());
   }
+
+  @ParameterizedTest
+  @ValueSource(strings={"1.5","\"1\"","null","2147483648"})
+  void protocolVersionDoesNotCoerceStringsOrFractionalNumbers(String version) throws Exception {
+    ObjectNode raw=(ObjectNode)json.readTree(wire());
+    raw.set("version",json.readTree(version));
+    assertThatThrownBy(()->codec.decode(order.toString(),raw.toString())).isInstanceOf(MessageFailure.class);
+  }
 }

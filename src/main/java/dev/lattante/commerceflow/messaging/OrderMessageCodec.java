@@ -33,7 +33,12 @@ public class OrderMessageCodec {
   public Message decode(String key, String raw) {
     try {
       if (raw == null || raw.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) throw new MessageFailure();
-      Message event = json.readValue(raw, Message.class);
+      JsonNode wire = json.readTree(raw);
+      if (wire == null || !wire.isObject() || !wire.path("version").isIntegralNumber()
+          || !wire.path("sequence").isIntegralNumber()) throw new MessageFailure();
+      for (String field : List.of("eventId", "orderId", "type", "occurredAt"))
+        if (!wire.path(field).isTextual()) throw new MessageFailure();
+      Message event = json.treeToValue(wire, Message.class);
       if (event.eventId() == null || event.orderId() == null || event.occurredAt() == null
           || !TYPES.contains(event.type()) || event.version() != 1
           || event.sequence() != (event.type().equals("ORDER_RESERVED") ? 1 : 2)
