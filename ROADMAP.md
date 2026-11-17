@@ -98,3 +98,8 @@ load tests, production proxy/broker/Redis hardening and deployment explicitly de
 - [x] CI 44104045854 passed 122 unit + 160 integration tests and complete Compose/HTTP maintenance smoke.
 - [x] Source/migration/path review and local MVP handoff recorded; PR #8 records integration state.
 - [ ] Production follow-ups: capacity, broker/Redis hardening, cursor/index measurement and replay-safe archival.
+
+## Local testing guide — 2026-11-17
+- [x] Spanish Windows/Swagger walkthrough with exact stock/state/idempotency expectations.
+- [x] Credential handling, preserved volumes, expiry/role behavior and test-command prerequisites documented.
+- [x] Runtime source unchanged from the verified MVP; documentation-only validation.
