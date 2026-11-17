@@ -65,6 +65,9 @@ services:
   app:
     build: .
     environment:
+      CF_TOKEN_CLEANUP_ENABLED: ${CF_TOKEN_CLEANUP_ENABLED:-true}
+      CF_TOKEN_CLEANUP_BATCH_SIZE: ${CF_TOKEN_CLEANUP_BATCH_SIZE:-200}
+      CF_TOKEN_CLEANUP_INTERVAL_MS: ${CF_TOKEN_CLEANUP_INTERVAL_MS:-60000}
       CF_RATE_LIMIT_ENABLED: "true"
       CF_REDIS_HOST: redis
       CF_REDIS_PASSWORD: ${CF_REDIS_PASSWORD:?Set an independent Redis password}

@@ -103,3 +103,17 @@ show role/version and tokens rolling back together. Present only scenarios backe
 36. Why revoke credentials on promotion and reactivation as well as disable/demotion?
 37. Which requests can still finish after revocation, and which guarantee does the guard actually provide?
 38. Why should bootstrap reject a disabled configured account instead of silently restoring it?
+
+## Maintenance demonstration
+Show that expiry rejects credentials before any physical cleanup. In disposable MySQL, lock one
+expired row and scan from another connection: it is skipped and later recovered. Inject a failure
+on a later per-key delete and show the earlier delete rolled back with no committed counter.
+Repeat order/idempotency and inbox processing after cleanup to prove those guarantees remain intact.
+Use the [demo guide](DEMO.md) and linked CI evidence for the local MVP walkthrough.
+
+39. Why is an expired credential safe to delete while an old inbox/idempotency row may not be?
+40. Why claim concrete rows with SKIP LOCKED rather than paginate deletions by offset?
+41. Why use the same server cutoff in selection and deletion?
+42. What happens to skipped/failed batches and their after-commit metrics?
+43. Why does bounded response size not prove bounded database work for offset pages?
+44. What retention horizon and tombstone protocol would allow safe replay-evidence archival?

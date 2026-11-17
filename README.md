@@ -2,7 +2,7 @@
 
 Original commerce backend by Luciano Lattante. Built incrementally as a **modular monolith**, with Java 21, Spring Boot, MySQL and explicit domain invariants.
 
-**Current status: verified product/user administration, order lifecycle and operational recovery.** The order lifecycle now feeds a leased Kafka publisher and an idempotent asynchronous projection, with bounded retries, durable DLQ and audited ADMIN replay. No real payment/provider or public deployment is involved. CF-06 adds Redis-backed admission, transactional order audit and committed-operation metrics; the executed evidence is recorded below.
+**Verified local functional MVP.** Product/user administration, owned orders, simulated lifecycle, Kafka recovery, Redis admission, transactional audit and bounded expired-token maintenance run together in the documented local setup. CI 44104045854 passed 122 unit + 160 integration tests and the complete Compose/HTTP flow. See [the local demonstration](docs/DEMO.md) and [exact verification evidence](docs/VERIFICATION.md).
 
 [Order creation](docs/ORDERS.md) · [Payment, cancellation and expiry](docs/LIFECYCLE.md) · [Kafka, inbox and DLQ](docs/MESSAGING.md) · [Admission, audit and metrics](docs/OPERABILITY.md)
 
@@ -88,7 +88,7 @@ No authentication cookies, Basic authentication or form login are enabled. CSRF 
 
 ADMIN bootstrap is explicit environment configuration. Existing administrator credentials are preserved rather than silently reset. A conflicting CUSTOMER bootstrap account fails startup instead of being promoted.
 
-Redis login/registration/write admission is implemented in CF-06. Account recovery, verification, refresh tokens, token cleanup and full user/role administration remain pending. This increment is intended for local evaluation; no public deployment is claimed.
+Redis admission, role/activation administration and expired-token cleanup are implemented. Identity recovery/verification, MFA and refresh tokens remain deferred. This is a local MVP; no production deployment or distributed trace export is claimed.
 
 The order increment is documented in [ORDERS.md](docs/ORDERS.md) and [ADR 3](docs/adr/0003-transactional-order-creation.md). [Kafka publication, inbox and DLQ](docs/MESSAGING.md) extend the durable outbox. Delivery is at least once; the consumer deduplicates committed effects.
 
@@ -99,11 +99,13 @@ mvn test
 mvn verify
 ```
 
-- `test`: database-free unit tests. **90 passed locally and in CF-06 CI**. Local runtime: JDK 21.0.7 and Maven 3.9.0 on 2026-11-17. Local Docker was unavailable, so container execution was verified in CI.
-- `verify`: **108 MySQL/Kafka/Redis integration tests passed in CF-06 CI**, including order lifecycle, real Kafka delivery/recovery, concurrency, rollback and migration preservation, using disposable MySQL 8.4.11, Kafka 4.1.1 and Redis 8.2.11 through Testcontainers 2.0.5. It requires a working Docker daemon and fails when Docker is unavailable; it is not silently skipped.
-- [CI](.github/workflows/verify.yml): runs verify, validates Compose, builds/starts local containers and checks actual HTTP health/catalog responses. The [foundation checkpoint](docs/VERIFICATION.md) records the initial baseline; current PR checks track the additional order/rollback/concurrency suite.
+- test runs database-free unit tests: **122 passed locally and in CI**. Local runtime: Oracle JDK 21.0.7 / Maven 3.9.0.
+- verify adds disposable Testcontainers MySQL/Kafka/Redis execution: **160 integration tests passed in CI**. A working Docker daemon is required; unavailable Docker is not silently skipped.
+- [CI 44104045854](https://github.com/lucianoLattante/commerceflow/actions/runs/44104045854) passed all **282 JUnit cases**, plus Compose configuration/build/startup and actual HTTP domain/maintenance/admission flows.
 
-The unit result alone is not evidence of MySQL concurrency or rollback. OrderFlowIT and SchemaUpgradeIT exercise those properties using disposable databases; consult their actual CI results. [CF-06 run 44083936277](https://github.com/lucianoLattante/commerceflow/actions/runs/44083936277) passed all 198 tests and Compose/HTTP checks; see the exact source commit and limits in [VERIFICATION.md](docs/VERIFICATION.md).
+Local integration classes compiled but did not execute because the Docker daemon was unavailable.
+[VERIFICATION.md](docs/VERIFICATION.md) retains exact source commits, commands, suite breakdown,
+corrected local test failures and all historical checkpoints. Static validation is not runtime testing.
 
 ## Technical evidence
 
@@ -117,21 +119,14 @@ The unit result alone is not evidence of MySQL concurrency or rollback. OrderFlo
 
 The repository contains original portfolio code, with no employer source or production data.
 
-## Verified product administration
+## Administration, maintenance and interview demonstration
 
-ADMIN can discover inactive products and revise name, price/currency, active state and absolute on-hand
-stock using an expected version. Existing order snapshots and reservations are preserved. Actor-attributed
-before/after audit shares the product transaction. See the [API and retry contract](docs/CATALOG_ADMINISTRATION.md)
-and [ADR 7](docs/adr/0007-catalog-revisions.md). Executed validation is tracked in [VERIFICATION.md](docs/VERIFICATION.md).
-User administration is described below; retention remains deferred.
+- [Catalog revisions](docs/CATALOG_ADMINISTRATION.md): shared inventory locking/versioning, deactivation and atomic before/after audit.
+- [User administration](docs/IDENTITY_ADMINISTRATION.md): last-active-admin protection, login/revocation coordination and fresh authentication after role changes.
+- [Retention and operator pages](docs/RETENTION.md): bounded expired-token cleanup; business/inbox/idempotency/audit evidence is retained.
+- [Local MVP demonstration](docs/DEMO.md): reproducible setup, executed failure scenarios and interview narrative.
+- [ADR 7](docs/adr/0007-catalog-revisions.md), [ADR 8](docs/adr/0008-identity-administration.md) and [ADR 9](docs/adr/0009-bounded-maintenance.md) explain the tradeoffs.
 
-Catalog checkpoint CI 44089250548 passed **99 unit + 123 MySQL/Kafka/Redis integration tests**,
-plus Compose startup and the actual HTTP flow. See [exact evidence](docs/VERIFICATION.md).
-
-## Verified user administration
-
-ADMIN directory and versioned role/activation updates now share an atomic state/token/audit commit.
-A database guard preserves the last active administrator; login issuance shares the target user lock.
-Promotion/reactivation require fresh authentication. See the [API and concurrency contract](docs/IDENTITY_ADMINISTRATION.md)
-and [ADR 8](docs/adr/0008-identity-administration.md). CI 44093544797 passed **108 unit + 146 MySQL/Kafka/Redis integration tests**, with zero failures/errors/skips, plus Compose startup and actual HTTP identity flows.
-Email recovery/verification, refresh tokens and retention remain deferred.
+Payments are synthetic. Delivery is at least once. Complete replay-safe archival/retention, capacity
+benchmarks, distributed tracing, production broker/Redis/identity hardening and deployment remain
+future work. No performance numbers or production-readiness claim is made.

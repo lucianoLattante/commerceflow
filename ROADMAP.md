@@ -2,7 +2,7 @@
 
 Original Java 21 / Spring Boot modular monolith with explicit commit boundaries.
 Order creation, simulated lifecycle and durable Kafka projection/recovery are implemented and verified.
-Redis admission, transactional order audit and operational metrics are also verified. Deferred maintenance remains below; no production deployment is claimed.
+Redis admission, transactional audits/metrics, product/user administration and bounded token maintenance are verified. The local functional MVP is handed off through docs/DEMO.md; production follow-ups remain below.
 
 ## Verified increments
 
@@ -36,16 +36,17 @@ GitHub PR pages record integration state separately from test success.
 - [x] Add justified Redis admission with explicit outage behavior; no speculative product cache.
 - [x] Add order-operation audit beyond message recovery, committed transition/delivery/queue metrics and failure demonstrations.
 - [x] Make metadata-only admin queries avoid message payloads; expose audit pagination.
-- [ ] Extend operator visibility, retention and poison-backlog handling.
+- [x] Paged operator metadata, explicit retained-evidence policy and bounded expired-token cleanup.
+- [ ] Replay-safe archival, cursor/index measurement and production poison-backlog policy.
 - [x] Concrete versioned product administration with atomic audit.
 - [x] ADMIN user directory, versioned role/activation changes and atomic token/audit updates.
-- [ ] Finish the reproducible demonstration and case study.
+- [x] Reproducible local MVP demonstration, ADRs and source-backed interview case study.
 
 ## Remaining identity maintenance
 
 Registration/login/self-profile/logout, explicit admin bootstrap and role-aware access are implemented.
 Login/registration throttling and role/activation administration are implemented. Email verification/recovery,
-refresh tokens and token cleanup remain deferred. No complete identity-lifecycle claim is made.
+MFA and refresh tokens remain deferred; expired-token cleanup is implemented. No complete identity-lifecycle claim is made.
 
 ## Known boundaries
 
@@ -85,4 +86,15 @@ load tests, production proxy/broker/Redis hardening and deployment explicitly de
 - [x] 108 local unit tests passed; integration sources compiled.
 - [x] CI 44093544797 passed 108 unit + 146 real MySQL/Kafka/Redis tests and Compose/HTTP identity smoke.
 - [x] Review paths, migrations, hashes and runtime evidence; PR #7 records integration state.
-- [ ] Next: retention/cleanup, operational visibility and final presentation.
+- [x] Bounded maintenance and final local MVP demonstration delivered below.
+
+## Verified bounded maintenance and local MVP handoff
+
+- [x] Expired-token batches, SKIP LOCKED claims, per-key deletion, rollback and after-commit metrics.
+- [x] Read-only ADMIN maintenance metadata and bounded typed delivery/DLQ pages; legacy lists preserved.
+- [x] Explicit retention policy preserves business/replay/audit evidence; no migration changes.
+- [x] ADR 9, API/runbook, reproducible local MVP demo and interview guidance.
+- [x] 122 local unit tests passed; integration compiled only locally.
+- [x] CI 44104045854 passed 122 unit + 160 integration tests and complete Compose/HTTP maintenance smoke.
+- [x] Source/migration/path review and local MVP handoff recorded; PR #8 records integration state.
+- [ ] Production follow-ups: capacity, broker/Redis hardening, cursor/index measurement and replay-safe archival.

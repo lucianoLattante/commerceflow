@@ -53,6 +53,11 @@ springdoc:
   swagger-ui:
     path: /docs
 commerceflow:
+  identity:
+    cleanup:
+      enabled: ${CF_TOKEN_CLEANUP_ENABLED:false}
+      batch-size: ${CF_TOKEN_CLEANUP_BATCH_SIZE:200}
+      interval-ms: ${CF_TOKEN_CLEANUP_INTERVAL_MS:60000}
   token-lifetime: PT15M
   rate-limit:
     enabled: ${CF_RATE_LIMIT_ENABLED:false}

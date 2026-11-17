@@ -37,4 +37,16 @@ class QueueMetricsTest {
     assertThat(registry.get("commerceflow.dispatch.oldest.unconfirmed.seconds").gauge().value())
         .isZero();
   }
+
+  @Test
+  void expiredTokenObservationFailureIsUnknownInsteadOfFalseZero() {
+    var jdbc = mock(JdbcTemplate.class);
+    when(jdbc.queryForObject(anyString(), eq(Long.class), any(Object[].class)))
+        .thenThrow(
+            new org.springframework.dao.DataAccessResourceFailureException(
+                "Synthetic observation fault"));
+    var registry = new SimpleMeterRegistry();
+    new QueueMetrics(jdbc, Clock.systemUTC()).bindTo(registry);
+    assertThat(registry.get("commerceflow.identity.tokens.expired").gauge().value()).isNaN();
+  }
 }

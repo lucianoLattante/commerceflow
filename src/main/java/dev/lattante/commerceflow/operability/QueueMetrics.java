@@ -28,6 +28,8 @@ public class QueueMetrics implements MeterBinder {
     Gauge.builder("commerceflow.dispatch.oldest.unconfirmed.seconds", this, ignored -> oldest())
         .register(registry);
     Gauge.builder("commerceflow.dead.letters", this, ignored -> deadLetters()).register(registry);
+    Gauge.builder("commerceflow.identity.tokens.expired", this, ignored -> expiredTokens())
+        .register(registry);
   }
 
   private double count(String state) {
@@ -47,6 +49,17 @@ public class QueueMetrics implements MeterBinder {
       return first == null
           ? 0
           : Math.max(0, Duration.between(first.toInstant(), clock.instant()).toMillis() / 1000.0);
+    } catch (RuntimeException unavailable) {
+      return Double.NaN;
+    }
+  }
+
+  private double expiredTokens() {
+    try {
+      return jdbc.queryForObject(
+          "SELECT COUNT(*) FROM access_tokens WHERE expires_at<=?",
+          Long.class,
+          Timestamp.from(clock.instant()));
     } catch (RuntimeException unavailable) {
       return Double.NaN;
     }

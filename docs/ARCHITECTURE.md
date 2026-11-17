@@ -80,3 +80,9 @@ V7 preserves V1-V6 and existing tokens, adds user versions, a singleton membersh
 credential-free user_admin_audit. [ADR 8](adr/0008-identity-administration.md) defines last-admin
 protection, operator revalidation, login issuance locking and atomic token revocation/audit.
 The API can change role/active state; it cannot replace identity/credentials or delete users.
+
+## Bounded maintenance
+The identity cleanup worker claims expired tokens using MySQL row locks and deletes only selected
+keys in one transaction; committed counters run afterward. [ADR 9](adr/0009-bounded-maintenance.md)
+and the [retention policy](RETENTION.md) preserve all business/idempotency/inbox/audit evidence.
+Read-only ADMIN pages select message metadata, never payloads. No schema change is required.
