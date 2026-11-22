@@ -54,11 +54,21 @@ assert created["total"] == Decimal("24.68")
 assert call("GET", "/api/products/" + product["id"])["available"] == 3
 assert call("GET", "/api/orders/" + created["id"], token=access)["id"] == created["id"]
 call("GET", "/api/orders/" + created["id"], expected=401)
+payment_path = "/api/orders/" + created["id"] + "/simulated-payment"
+missing_key = call("POST", payment_path, {"decision": "APPROVED"}, token=access, expected=400)
+assert missing_key["detail"] == "Required header is missing: Idempotency-Key"
+bad_decision = call("POST", payment_path, {"decision": "PAID"}, token=access,
+                    key="demo-payment-001", expected=400)
+assert bad_decision["detail"] == "decision must be APPROVED or DECLINED"
+bad_id = call("POST", "/api/orders/string/simulated-payment", {"decision": "APPROVED"},
+              token=access, key="demo-payment-001", expected=400)
+assert bad_id["detail"] == "Parameter 'id' must be a valid resource UUID"
+assert call("GET", "/api/products/" + product["id"])["available"] == 3
 paid = call("POST", "/api/orders/" + created["id"] + "/simulated-payment",
-            {"decision": "APPROVED"}, token=access, key="smoke-payment-" + suffix)
+            {"decision": "APPROVED"}, token=access, key="demo-payment-001")
 assert paid["status"] == "PAID"
 assert call("POST", "/api/orders/" + created["id"] + "/simulated-payment",
-            {"decision": "APPROVED"}, token=access, key="smoke-payment-" + suffix) == paid
+            {"decision": "APPROVED"}, token=access, key="demo-payment-001") == paid
 assert call("GET", "/api/products/" + product["id"])["available"] == 3
 second = call("POST", "/api/orders", payload, token=access,
               key="smoke-cancel-" + suffix, expected=201)

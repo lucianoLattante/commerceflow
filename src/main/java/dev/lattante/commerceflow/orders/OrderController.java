@@ -3,6 +3,9 @@ package dev.lattante.commerceflow.orders;
 import dev.lattante.commerceflow.identity.Actor;
 import dev.lattante.commerceflow.inventory.InventoryReservation.Demand;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.net.URI;
@@ -42,11 +45,18 @@ class OrderController {
         .body(result.order());
   }
 
-  record SimulatedPayment(@NotNull PaymentDecision decision) {}
+  record SimulatedPayment(
+      @NotNull @Schema(example = "APPROVED", description = "Synthetic decision: APPROVED or DECLINED") PaymentDecision decision) {}
 
   @PostMapping("/{id}/simulated-payment")
+  @Operation(summary = "Simulate payment for an owned order",
+      description = "Use the order UUID returned by creation, the same owner's Bearer token, and an 8-128 character Idempotency-Key. Repeat the same key/decision only to retry the same payment. Reservations expire after 15 minutes.")
   ResponseEntity<OrderService.OrderView> pay(
-      @PathVariable UUID id, @AuthenticationPrincipal Actor actor,
+      @Parameter(description = "Order UUID returned by POST /api/orders") @PathVariable UUID id,
+      @AuthenticationPrincipal Actor actor,
+      @Parameter(description = "8-128 ASCII letters, digits, dots, colons, underscores or hyphens. Keep unchanged on retry.",
+          example = "demo-payment-001",
+          schema = @Schema(type = "string", minLength = 8, maxLength = 128, pattern = "[A-Za-z0-9._:-]{8,128}"))
       @RequestHeader("Idempotency-Key") String key,
       @Valid @RequestBody SimulatedPayment input) {
     var result = lifecycle.pay(id.toString(), actor, key, input.decision());

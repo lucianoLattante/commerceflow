@@ -961,6 +961,9 @@ class OrderFlowIT {
         .andExpect(
             jsonPath("$.paths['/api/orders/{id}/simulated-payment'].post.security[0].bearerAuth")
                 .isArray())
+        .andExpect(jsonPath("$.paths['/api/orders/{id}/simulated-payment'].post.parameters[?(@.name == 'Idempotency-Key')].example")
+            .value(org.hamcrest.Matchers.hasItem("demo-payment-001")))
+        .andExpect(jsonPath("$.components.schemas.SimulatedPayment.properties.decision.example").value("APPROVED"))
         .andExpect(
             jsonPath("$.paths['/api/orders/{id}/cancel'].post.security[0].bearerAuth").isArray());
   }
