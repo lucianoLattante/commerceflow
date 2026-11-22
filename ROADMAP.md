@@ -103,3 +103,12 @@ load tests, production proxy/broker/Redis hardening and deployment explicitly de
 - [x] Spanish Windows/Swagger walkthrough with exact stock/state/idempotency expectations.
 - [x] Credential handling, preserved volumes, expiry/role behavior and test-command prerequisites documented.
 - [x] Runtime source unchanged from the verified MVP; documentation-only validation.
+
+## Payment request diagnostics - 2026-11-22
+- [x] Reused the verified 138-file main checkpoint and preserved existing user changes/credentials.
+- [x] Investigated reported HTTP 400; documented example verified by binding tests and real Compose HTTP smoke.
+- [x] Added redacted validation details, explicit Swagger examples and focused HTTP-binding regression tests.
+- [x] Added safe local env/port/readiness diagnosis and Docker command guidance; existing local app mapping is 8081.
+- [x] Local 128 unit tests passed; CI 45043457219 passed 128 unit + 160 MySQL/Kafka/Redis integration tests and real Compose/HTTP.
+- [x] Redacted errors and the exact demo-payment-001 / APPROVED example verified; runtime source 57666ff24e450984d78bfcfbe47ebd018d58a33c.
+- [ ] Original user request/body cannot be recovered; no unverified claim that its specific cause is established.

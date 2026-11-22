@@ -21,15 +21,33 @@ Este proyecto utiliza contenedores Linux.
 
 ## 2. Arrancar el stack
 
+El archivo a utilizar es **`.env` junto a `compose.yml` y `pom.xml` de CommerceFlow**. `.env.example`
+es una referencia y `scripts/init-env.ps1` genera los valores locales cuando no existe `.env`.
+Cada copia del proyecto tiene su propio archivo: ejecutar desde la carpeta correcta o usar
+`--env-file .env -f compose.yml` explícitamente. Conservar el archivo existente y sus contraseñas.
+Las variables del shell pueden prevalecer sobre las del archivo.
+
+- `CF_DB_PASSWORD`: credencial de la aplicación en MySQL.
+- `CF_DB_ROOT_PASSWORD`: credencial distinta del administrador de MySQL.
+- `CF_REDIS_PASSWORD`: credencial independiente de Redis.
+- `CF_BOOTSTRAP_ADMIN_EMAIL` y `CF_BOOTSTRAP_ADMIN_PASSWORD`: login del administrador inicial.
+- `CF_APP_PORT` y `CF_DB_PORT`: puertos publicados opcionales; defaults del repositorio 8080 y 3306.
+
+CommerceFlow usa tokens opacos emitidos por `/api/auth/token`; no necesita claves de Google, JWT,
+Mercado Pago ni el `.env` de Crypto Alert AI para simular pagos. Compose configura los hosts internos
+`mysql`, `kafka` y `redis`. Agregar una variable a `.env` no la pasa automáticamente al contenedor:
+debe estar referenciada en `compose.yml`.
+
 Desde la carpeta que contiene compose.yml y pom.xml:
 
 ```powershell
 if (-not (Test-Path -LiteralPath .env)) {
     powershell -ExecutionPolicy Bypass -File scripts/init-env.ps1
 }
-docker compose up -d --build --wait --wait-timeout 240
+docker compose --env-file .env -f compose.yml config --quiet
+docker compose --env-file .env -f compose.yml up -d --build --wait --wait-timeout 240
 docker compose ps
-Invoke-RestMethod http://localhost:8080/actuator/health/readiness
+powershell -ExecutionPolicy Bypass -File scripts/check-local.ps1
 ```
 
 El primer build descarga imágenes/dependencias. Con Compose no es necesario instalar Java, Maven,
@@ -43,6 +61,11 @@ usar scripts/add-redis-env.ps1. No regenerar contraseñas para un volumen MySQL 
 cambiar el archivo no cambia las credenciales guardadas en la base. Conservar la configuración original.
 
 ## 3. Abrir Swagger
+
+Los enlaces siguientes usan el puerto predeterminado 8080. Si `docker compose ps` muestra
+`127.0.0.1:8081->8080/tcp`, abrir **http://localhost:8081/docs** y usar 8081 en las peticiones.
+8080 a la derecha es el puerto interno del contenedor. `scripts/check-local.ps1` muestra el puerto
+publicado y comprueba la configuración sin imprimir secretos.
 
 - Swagger UI: <http://localhost:8080/docs>
 - Catálogo público: <http://localhost:8080/api/products>
@@ -103,6 +126,39 @@ En POST /api/orders/{id}/simulated-payment:
 
 La orden pasa a PAID. La disponibilidad sigue en 8: el pago consume la reserva, no descuenta dos veces.
 Repetir el mismo pago/clave no debe generar otra transición.
+
+### Si simulated-payment devuelve 400
+
+Usar el mismo token del propietario de la orden, el **UUID completo de la orden** (no el UUID del
+producto ni el texto `string`), y `Content-Type: application/json`. El header `Idempotency-Key` es
+obligatorio aunque el token sea válido: cargar `demo-payment-001` en el campo del header de Swagger.
+El body completo es `{"decision":"APPROVED"}` o `{"decision":"DECLINED"}`, respetando mayúsculas.
+No enviar `PAID` como decisión.
+
+Los ejemplos de esta guía (`demo-payment-001` y `APPROVED`) cumplen el contrato. Una respuesta 400
+requiere revisar su `detail`: indica el header faltante, UUID inválido, campo requerido, valores
+permitidos o JSON malformado, sin reproducir tokens ni valores recibidos. Una clave como `string`
+tiene solo seis caracteres y no cumple la longitud mínima de ocho.
+
+```powershell
+$baseUrl = 'http://localhost:8080' # Usar el puerto publicado; por ejemplo 8081
+$orderId = '<UUID devuelto al crear la orden>'
+# $accessToken: accessToken obtenido con POST /api/auth/token; mantenerlo privado
+$headers = @{ Authorization = "Bearer $accessToken"; 'Idempotency-Key' = 'demo-payment-001' }
+Invoke-RestMethod -Method Post -Uri "$baseUrl/api/orders/$orderId/simulated-payment" `
+    -Headers $headers -ContentType 'application/json' -Body '{"decision":"APPROVED"}'
+```
+
+| Resultado | Qué comprobar |
+| --- | --- |
+| 200 PAID | Simulación aprobada; revisar también el estado del body |
+| 200 EXPIRED | Reserva vencida; crear otra orden (el login nuevo no renueva la reserva) |
+| 400 invalid_request | `detail`, UUID, JSON, decisión y `Idempotency-Key` |
+| 401 | Login nuevo, token vigente y Authorize |
+| 404 | UUID real y propietario correcto; ADMIN tampoco paga órdenes de otro usuario |
+| 409 | Orden terminal o clave/decisión distinta de un pago ya realizado |
+| 429 | Esperar `Retry-After` antes de repetir |
+| 503 | Readiness y dependencias; reintentar según el contrato de idempotencia |
 GET /api/orders/{id}/audit muestra la reserva y el pago; GET /api/orders/{id}/projection llega
 asíncronamente a PAID con sequence=2 cuando Kafka procesa los eventos. Puede requerir volver a consultar.
 
@@ -150,3 +206,28 @@ docker compose up -d
 
 docker compose down detiene y elimina contenedores/red, conservando volúmenes.
 down --volumes elimina datos locales; no se necesita para este recorrido.
+
+## 11. Comandos esenciales de Docker
+
+Ejecutar desde esta carpeta con el mismo `.env`:
+
+| Comando | Uso |
+| --- | --- |
+| `docker version` | Cliente y motor disponibles |
+| `docker compose config --quiet` | Validar configuración sin expandir secretos en pantalla |
+| `docker compose up -d --build` | Construir/actualizar y levantar el stack |
+| `docker compose ps` | Estado y puertos publicados |
+| `docker compose logs -f --tail 100 app` | Seguir errores de la API; Ctrl+C deja de seguir el log |
+| `docker compose logs --tail 100 mysql kafka redis` | Diagnóstico de dependencias |
+| `docker compose port app 8080` | Puerto real para conectarse desde la PC |
+| `docker compose stop` | Detener conservando contenedores y volúmenes |
+| `docker compose start` | Iniciar contenedores detenidos sin aplicar cambios de configuración |
+| `docker compose restart app` | Reiniciar la API con la configuración ya creada |
+| `docker compose up -d --force-recreate app` | Aplicar cambios del entorno al contenedor |
+| `docker compose down` | Quitar contenedores/red y conservar datos |
+
+Después de modificar código usar `up -d --build`; un `restart` no reconstruye la imagen.
+Después de modificar `.env`, recrear el contenedor afectado: `restart` no cambia sus variables.
+Cambiar una contraseña MySQL en `.env` no cambia la almacenada en un volumen existente.
+El `config` sin `--quiet`, `config --environment` y `docker inspect` completo pueden mostrar secretos;
+compartir solo el código HTTP, `detail` y logs revisados/redactados.

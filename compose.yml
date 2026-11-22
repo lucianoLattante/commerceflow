@@ -7,7 +7,7 @@ services:
       MYSQL_PASSWORD: ${CF_DB_PASSWORD:?Run scripts/init-env.ps1 first}
       MYSQL_ROOT_PASSWORD: ${CF_DB_ROOT_PASSWORD:?Set a distinct root password}
     ports:
-      - "127.0.0.1:3306:3306"
+      - "127.0.0.1:${CF_DB_PORT:-3306}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
@@ -79,7 +79,7 @@ services:
       CF_BOOTSTRAP_ADMIN_EMAIL: ${CF_BOOTSTRAP_ADMIN_EMAIL:?Set local bootstrap email}
       CF_BOOTSTRAP_ADMIN_PASSWORD: ${CF_BOOTSTRAP_ADMIN_PASSWORD:?Set local bootstrap password}
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${CF_APP_PORT:-8080}:8080"
     depends_on:
       mysql:
         condition: service_healthy

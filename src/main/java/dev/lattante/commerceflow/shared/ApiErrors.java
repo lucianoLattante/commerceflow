@@ -76,12 +76,33 @@ public class ApiErrors {
 
   @ExceptionHandler({
     MethodArgumentNotValidException.class,
-    HttpMessageNotReadableException.class,
-    MethodArgumentTypeMismatchException.class,
-    org.springframework.web.bind.MissingRequestHeaderException.class
   })
-  ProblemDetail validation(Exception e) {
-    return problem(HttpStatus.BAD_REQUEST, "invalid_request", "Request validation failed");
+  ProblemDetail validation(MethodArgumentNotValidException e) {
+    var fields = e.getBindingResult().getFieldErrors().stream()
+        .map(org.springframework.validation.FieldError::getField).distinct().limit(10).toList();
+    return problem(HttpStatus.BAD_REQUEST, "invalid_request",
+        fields.isEmpty() ? "Request validation failed" : "Request validation failed for: " + String.join(", ", fields));
+  }
+
+  @ExceptionHandler(org.springframework.web.bind.MissingRequestHeaderException.class)
+  ProblemDetail missingHeader(org.springframework.web.bind.MissingRequestHeaderException e) {
+    return problem(HttpStatus.BAD_REQUEST, "invalid_request", "Required header is missing: " + e.getHeaderName());
+  }
+
+  @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+  ProblemDetail invalidParameter(MethodArgumentTypeMismatchException e) {
+    return problem(HttpStatus.BAD_REQUEST, "invalid_request",
+        e.getRequiredType() == java.util.UUID.class
+            ? "Parameter '" + e.getName() + "' must be a valid resource UUID"
+            : "Request parameter has an invalid value: " + e.getName());
+  }
+
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  ProblemDetail invalidBody(HttpMessageNotReadableException e) {
+    boolean invalidDecision = e.getCause() instanceof com.fasterxml.jackson.databind.exc.InvalidFormatException invalid
+        && invalid.getTargetType() == dev.lattante.commerceflow.orders.PaymentDecision.class;
+    return problem(HttpStatus.BAD_REQUEST, "invalid_request",
+        invalidDecision ? "decision must be APPROVED or DECLINED" : "Request body must contain valid JSON with valid field values");
   }
 
   @ExceptionHandler(DataIntegrityViolationException.class)

@@ -392,3 +392,12 @@ readiness or a benchmark. Cleanup scheduling defaults off on host and on in Comp
 audit records remain retained; replay-safe archival/full retention, large-backlog cursor/index work,
 distributed trace export/correlation, production security/HA, capacity, identity recovery/MFA/refresh
 tokens and deployment remain explicitly deferred.
+
+
+## Payment request diagnostics - 2026-11-22
+
+Runtime source `57666ff24e450984d78bfcfbe47ebd018d58a33c`, PR #10. [CI 45043457219](https://github.com/lucianoLattante/commerceflow/actions/runs/45043457219) passed 128 unit and 160 real MySQL/Kafka/Redis integration tests, with no failures/errors/skips, plus full Compose startup/readiness and the real HTTP smoke. The six new standalone HTTP cases cover binding/validation; integration retains actual Bearer/security/database coverage. OpenAPI examples are asserted in the existing integration test. The smoke now submits the exact `demo-payment-001` / `APPROVED` example and checks missing header, unsupported decision and invalid UUID without consuming additional inventory.
+
+Local Windows: Oracle JDK 21.0.7/Maven 3.9.0 passed all 128 unit cases using the cached Byte Buddy 1.17.8 agent explicitly and Surefire forkCount=0 after Windows self-attach pipe errors; no project configuration was changed for that workaround. The earlier blocked attempts were interrupted, and the Maven command wrapper returned access denied. Local Docker engine was unavailable, so no local integration/HTTP claim is made. The safe PowerShell diagnostic identified the preexisting local 8081 publication and missing engine without printing credentials. Compose config, PowerShell parsing, Python AST and documentation links were checked separately.
+
+Existing local compose/.env changes remain preserved. Upstream default ports remain 8080/3306 and are now configurable. The exact original user's request is not available: its individual 400 cause is not claimed as established. Updated redacted error details expose the failing contract instead of echoing input or server exceptions. Documentation-only follow-ups preserve the tested runtime blobs.
