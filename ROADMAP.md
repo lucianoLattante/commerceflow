@@ -112,3 +112,9 @@ load tests, production proxy/broker/Redis hardening and deployment explicitly de
 - [x] Local 128 unit tests passed; CI 45043457219 passed 128 unit + 160 MySQL/Kafka/Redis integration tests and real Compose/HTTP.
 - [x] Redacted errors and the exact demo-payment-001 / APPROVED example verified; runtime source 57666ff24e450984d78bfcfbe47ebd018d58a33c.
 - [ ] Original user request/body cannot be recovered; no unverified claim that its specific cause is established.
+
+## Operator delivery pagination experiment
+
+- Compare the current failed-delivery offset and count queries with a candidate index and an exclusive timestamp/ID cursor on 50,000 synthetic dispatches.
+- Check equal pages across tied timestamps and record the plans in the disposable Compose verification job. [Reproduce the experiment](docs/CONTENTION.md#operator-delivery-pagination).
+- Evaluate other filter combinations, index write costs and API compatibility before selecting a production change.
