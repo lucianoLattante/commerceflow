@@ -91,6 +91,8 @@ jobs:
             < scripts/measure-delivery-pagination.sql | tee "$RUNNER_TEMP/delivery-pagination.txt"
           grep -E '^mysql=.* total=50000 failed=10000 distinct_timestamps=500$' "$RUNNER_TEMP/delivery-pagination.txt"
           grep -Fx 'offset_matches_cursor=1' "$RUNNER_TEMP/delivery-pagination.txt"
+      - name: Measure additional delivery filters and index write cost
+        run: python3 scripts/measure-delivery-index-tradeoffs.py
       - name: Container diagnostics on failure
         if: failure()
         run: docker compose logs --no-color
