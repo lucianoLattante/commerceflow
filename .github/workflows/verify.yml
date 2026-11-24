@@ -35,6 +35,8 @@ jobs:
           mvn -version
           docker version
           docker compose version
+      - name: Check module import boundaries
+        run: python3 scripts/check-module-boundaries.py
       - name: Unit and real MySQL Kafka Redis integration tests
         run: mvn -B --no-transfer-progress verify
       - name: Validate Compose configuration
@@ -47,6 +49,39 @@ jobs:
           curl --fail --silent http://localhost:8080/api/products
       - name: Exercise orders over real HTTP
         run: python3 scripts/smoke-orders.py
+      - name: Container diagnostics on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop disposable containers
+        if: always()
+        run: docker compose down --volumes
+
+  contention:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CF_DB_NAME: commerceflow
+      CF_DB_USER: commerceflow
+      CF_DB_PASSWORD: ci-only-database-fixture
+      CF_DB_ROOT_PASSWORD: ci-only-root-fixture
+      CF_REDIS_PASSWORD: ci-only-redis-fixture
+      CF_BOOTSTRAP_ADMIN_EMAIL: admin@example.test
+      CF_BOOTSTRAP_ADMIN_PASSWORD: ci-only-admin-fixture
+      CF_ALLOW_DISPOSABLE_LOAD: "1"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Record tools and start isolated Compose
+        run: |
+          docker version
+          docker compose version
+          docker compose up -d --build --wait --wait-timeout 240
+      - name: Measure order contention and recovery
+        run: |
+          set -euo pipefail
+          python3 scripts/measure-order-contention.py
+          docker compose exec -T mysql sh -ec 'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u "$MYSQL_USER" "$MYSQL_DATABASE"' < scripts/inspect-contention.sql
       - name: Container diagnostics on failure
         if: failure()
         run: docker compose logs --no-color
