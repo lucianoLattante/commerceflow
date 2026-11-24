@@ -2,7 +2,7 @@
 
 Original commerce backend by Luciano Lattante. Built incrementally as a **modular monolith**, with Java 21, Spring Boot, MySQL and explicit domain invariants.
 
-**Verified local functional MVP.** Product/user administration, owned orders, simulated lifecycle, Kafka recovery, Redis admission, transactional audit and bounded expired-token maintenance run together in the documented local setup. CI 44104045854 passed 122 unit + 160 integration tests and the complete Compose/HTTP flow. See [the local demonstration](docs/DEMO.md) and [exact verification evidence](docs/VERIFICATION.md).
+**Verified local functional MVP.** Product/user administration, owned orders, simulated lifecycle, Kafka recovery, Redis admission, transactional audit and bounded expired-token maintenance run together in the documented local setup. CI 45044196595 on the main branch passed 128 unit + 160 integration tests and the complete Compose/HTTP flow. See [the local demonstration](docs/DEMO.md) and [exact verification evidence](docs/VERIFICATION.md).
 
 [Order creation](docs/ORDERS.md) · [Payment, cancellation and expiry](docs/LIFECYCLE.md) · [Kafka, inbox and DLQ](docs/MESSAGING.md) · [Admission, audit and metrics](docs/OPERABILITY.md)
 
@@ -101,9 +101,9 @@ mvn test
 mvn verify
 ```
 
-- test runs database-free unit tests: **122 passed locally and in CI**. Local runtime: Oracle JDK 21.0.7 / Maven 3.9.0.
+- test runs database-free unit tests: **128 passed on the main branch in CI**. Local runtime: Oracle JDK 21.0.7 / Maven 3.9.0.
 - verify adds disposable Testcontainers MySQL/Kafka/Redis execution: **160 integration tests passed in CI**. A working Docker daemon is required; unavailable Docker is not silently skipped.
-- [CI 44104045854](https://github.com/lucianoLattante/commerceflow/actions/runs/44104045854) passed all **282 JUnit cases**, plus Compose configuration/build/startup and actual HTTP domain/maintenance/admission flows.
+- [CI 45044196595](https://github.com/lucianoLattante/commerceflow/actions/runs/45044196595) passed all **288 JUnit cases**, plus Compose configuration/build/startup and actual HTTP domain/maintenance/admission flows.
 
 Local integration classes compiled but did not execute because the Docker daemon was unavailable.
 [VERIFICATION.md](docs/VERIFICATION.md) retains exact source commits, commands, suite breakdown,
@@ -132,3 +132,5 @@ The repository contains original portfolio code, with no employer source or prod
 Payments are synthetic. Delivery is at least once. Complete replay-safe archival/retention, capacity
 benchmarks, distributed tracing, production broker/Redis/identity hardening and deployment remain
 future work. No performance numbers or production-readiness claim is made.
+
+- [Order contention and recovery](docs/CONTENTION.md) exercises the loopback Compose stack and reports observed timings and query plans.

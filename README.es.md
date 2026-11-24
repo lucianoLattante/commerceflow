@@ -3,7 +3,7 @@
 Backend original de Luciano Lattante con Java 21 y Spring Boot, desarrollado como **monolito modular**
 con MySQL, Kafka, Redis y límites explícitos entre módulos.
 
-**MVP local funcional verificado.** CI 44104045854 pasó **122 pruebas unitarias + 160 de integración
+**MVP local funcional verificado.** CI 45044196595 de `main` pasó **128 pruebas unitarias + 160 de integración
 MySQL/Kafka/Redis**, sin fallos, errores ni omisiones. También pasaron el arranque con Docker Compose
 y los flujos HTTP. La [evidencia](docs/VERIFICATION.md) identifica fuente, comandos, runtime y límites.
 
@@ -79,5 +79,5 @@ en una instancia/base descartable. CI aporta valores sintéticos.
 Los pagos son simulados. La entrega de eventos es al menos una vez; no se promete exactly-once externo.
 No hay despliegue público, métricas de capacidad ni código/datos del empleador.
 Recuperación/verificación de identidad, MFA/refresh tokens, retención completa con archival seguro,
-trazas distribuidas, hardening/HA productivos y benchmarks siguen pendientes.
+trazas distribuidas y endurecimiento para producción siguen pendientes. El [escenario local de contención](docs/CONTENTION.md) registra latencias y planes SQL en Compose; no mide capacidad productiva.
 El [README en inglés](README.md) desarrolla ejemplos de API y alcance.
