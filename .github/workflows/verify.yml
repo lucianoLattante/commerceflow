@@ -80,6 +80,7 @@ jobs:
       - name: Measure order contention and recovery
         run: |
           set -euo pipefail
+          curl --fail --silent --retry 30 --retry-all-errors --retry-delay 2 --max-time 5 http://127.0.0.1:8080/actuator/health/readiness
           python3 scripts/measure-order-contention.py
           docker compose exec -T mysql sh -ec 'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u "$MYSQL_USER" "$MYSQL_DATABASE"' < scripts/inspect-contention.sql
       - name: Container diagnostics on failure
