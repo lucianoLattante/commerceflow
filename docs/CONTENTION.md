@@ -24,3 +24,15 @@ docker compose exec -T mysql sh -ec \
 The experiment uses a session-local temporary table copied from the migrated delivery table definition. It populates 50,000 synthetic dispatches with 10,000 failures and 500 shared timestamps. It runs the failed-delivery page with size 25 after 5,025 records, plus the count query that supplies totalElements. It repeats the offset with an experimental index on state, creation time and ID, then looks for the same page using an exclusive creation time and ID cursor. The anchor is found separately to simulate a cursor returned by the preceding page. CI checks that both pages contain the same 25 IDs in order and that the first ID lies in the anchor's timestamp group.
 
 Read the EXPLAIN ANALYZE sections for chosen access paths, actual rows, loops and iterator times. This experiment uses one synthetic state filter and timestamp distribution in a warm session. HTTP latency, concurrent changes, write overhead and other filter combinations are outside its scope. The temporary index disappears with the session. See the [MySQL EXPLAIN reference](https://dev.mysql.com/doc/refman/8.4/en/explain.html).
+
+### Other filters and write cost
+
+With the same disposable Compose stack and the opt-in variable set, run
+
+~~~sh
+python3 scripts/measure-delivery-index-tradeoffs.py
+~~~
+
+This experiment uses 50,000 synthetic dispatches with two delivery kinds and 500 shared timestamps. It compares offset scans without the candidate index, offset scans with the index and exclusive cursor scans with the index. The three additional filter shapes are unfiltered, kind only and state plus kind. Each comparison uses the page of 25 records after offset 1,002 and checks that the cursor returns the same ordered IDs through a timestamp tie. The state-only case remains available in the first experiment.
+
+The script also records three paired wall-clock measurements for changing the state of 10,000 temporary-table rows. Both variants use the primary key to select the same rows and roll the update back. Results describe index maintenance during the UPDATE on this fixture. The order is baseline then candidate and the runs share the container's caches. Commit latency, durability costs of permanent tables, concurrent writers and index space are outside this measurement. Use the displayed counts and plan shapes alongside the timings.
