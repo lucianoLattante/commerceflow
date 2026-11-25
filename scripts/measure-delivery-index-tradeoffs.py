@@ -1,10 +1,15 @@
 """Compare operator page plans and index maintenance in disposable Compose MySQL."""
 
+import argparse
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from decimal import Decimal
 import os
 import re
 from statistics import median
 import subprocess
 import sys
+from uuid import uuid4
 
 
 PAGE_SIZE = 25
@@ -115,10 +120,7 @@ def mysql(sql):
     return result.stdout
 
 
-def main():
-    if os.environ.get("CF_ALLOW_DISPOSABLE_LOAD") != "1":
-        sys.exit("Start a disposable Compose stack and set CF_ALLOW_DISPOSABLE_LOAD=1.")
-
+def measure_temporary():
     baseline = read_scenarios(indexed=False)
     indexed = read_scenarios(indexed=True)
     samples = {"baseline": [], "indexed": []}
@@ -146,6 +148,130 @@ def main():
             times.append(int(matches[0][1]))
     for label, times in samples.items():
         print(f"write {label} median_ms={median(times) / 1000:.3f}")
+
+
+@contextmanager
+def persistent_fixture(indexed):
+    table = f"cf_delivery_fixture_{uuid4().hex}"
+    mysql(f"CREATE TABLE {table} LIKE message_dispatch;")
+    try:
+        seed = FIXTURE.replace("CREATE TEMPORARY TABLE cf_index_fixture LIKE message_dispatch;", "")
+        counts = mysql(seed.replace("cf_index_fixture", table))
+        if not re.fullmatch(
+            r"mysql=\S+ total=50000 failed=10000 dlq=12500 failed_dlq=2500", counts.strip()
+        ):
+            raise RuntimeError("Unexpected persistent fixture volume")
+        if indexed:
+            mysql(f"ALTER TABLE {table} ADD INDEX ix_fixture_state_created_id (state, created_at, id);")
+        yield table
+    finally:
+        mysql(f"DROP TABLE {table};")
+
+
+def page_ids(table, predicate, offset=None):
+    query = page(predicate, "id, created_at", offset).replace("cf_index_fixture", table)
+    return f"SELECT GROUP_CONCAT(id ORDER BY created_at, id) FROM ({query}) visible_page;"
+
+
+def verify_pages_between_commits():
+    with persistent_fixture(indexed=True) as table:
+        failed = "state = 'FAILED'"
+        before_count, first_page = mysql(
+            f"SELECT COUNT(*) FROM {table} WHERE {failed};\n{page_ids(table, failed)}"
+        ).splitlines()
+        first_ids = list(map(int, first_page.split(",")))
+        if before_count != "10000" or first_ids != list(range(0, 125, 5)):
+            raise RuntimeError("Unexpected original page")
+        anchor = f"{first_ids[-1]:012d}"
+        mysql(f"""
+START TRANSACTION;
+UPDATE {table} SET state = 'SENT' WHERE id IN ('000000000000', '000000000005');
+UPDATE {table} SET state = 'FAILED' WHERE id = '000000000001';
+COMMIT;
+""")
+        count, offset_ids, seek_ids = mysql(f"""
+SELECT created_at, id INTO @anchor_time, @anchor_id FROM {table} WHERE id = '{anchor}';
+SELECT COUNT(*) FROM {table} WHERE {failed};
+{page_ids(table, failed, PAGE_SIZE)}
+{page_ids(table, f"{failed} AND {CURSOR}")}
+""").splitlines()
+        offset_ids = list(map(int, offset_ids.split(",")))
+        seek_ids = list(map(int, seek_ids.split(",")))
+        if (count != "9999" or offset_ids != list(range(130, 255, 5))
+                or seek_ids != list(range(125, 250, 5))):
+            raise RuntimeError("Unexpected pages after committed filter changes")
+        print("page_changes total_before=10000 total_after=9999 offset_first=130 cursor_first=125")
+
+
+def commit_range(table, start_at, lower):
+    output = mysql(f"""
+DO SLEEP(GREATEST(0, {start_at} - UNIX_TIMESTAMP(SYSDATE(6))));
+START TRANSACTION;
+SET @started_at = UNIX_TIMESTAMP(SYSDATE(6));
+UPDATE {table} FORCE INDEX (PRIMARY)
+SET state = IF(state = 'FAILED', 'SENT', 'FAILED')
+WHERE id >= '{lower:012d}' AND id < '{lower + UPDATE_ROWS:012d}';
+SET @changed = ROW_COUNT();
+COMMIT;
+SELECT @changed, @started_at, UNIX_TIMESTAMP(SYSDATE(6));
+""")
+    rows, start, end = output.strip().split("\t")
+    start, end = Decimal(start), Decimal(end)
+    if int(rows) != UPDATE_ROWS or end <= start:
+        raise RuntimeError("Unexpected committed update")
+    return start, end
+
+
+def measure_commits(indexed):
+    with persistent_fixture(indexed) as table, ThreadPoolExecutor(max_workers=2) as writers:
+        start_at = Decimal(mysql("SELECT UNIX_TIMESTAMP(SYSDATE(6)) + 3;").strip())
+        futures = [writers.submit(commit_range, table, start_at, low) for low in (10_000, 20_000)]
+        windows = [future.result() for future in futures]
+        first_start = min(start for start, end in windows)
+        last_end = max(end for start, end in windows)
+        overlap = min(end for start, end in windows) - max(start for start, end in windows)
+        failed = mysql(f"SELECT COUNT(*) FROM {table} WHERE state = 'FAILED';").strip()
+        if failed != "22000":
+            raise RuntimeError("The committed updates were not both visible to a separate session")
+        return (last_end - first_start) * 1000, max(0, overlap) * 1000
+
+
+def measure_durable():
+    settings = mysql(
+        "SELECT @@innodb_flush_log_at_trx_commit, @@log_bin, @@sync_binlog;"
+    ).strip()
+    flush, log_bin, sync_binlog = settings.split("\t")
+    if flush != "1" or (log_bin == "1" and sync_binlog != "1"):
+        raise RuntimeError("This experiment requires commit flushes and synchronous binary logs if enabled")
+    print(f"commit_settings innodb_flush_log_at_trx_commit={flush} log_bin={log_bin} sync_binlog={sync_binlog}")
+    verify_pages_between_commits()
+    samples = {False: [], True: []}
+    overlaps = {False: 0, True: 0}
+    for trial in range(SAMPLES):
+        for indexed in (False, True) if trial % 2 == 0 else (True, False):
+            label = "indexed" if indexed else "baseline"
+            elapsed_ms, overlap_ms = measure_commits(indexed)
+            samples[indexed].append(elapsed_ms)
+            overlaps[indexed] += overlap_ms > 0
+            print(f"commit {label} trial={trial + 1} rows=20000 "
+                  f"elapsed_ms={elapsed_ms:.3f} overlap_ms={overlap_ms:.3f}")
+    for indexed, times in samples.items():
+        label = "indexed" if indexed else "baseline"
+        print(f"commit {label} median_ms={median(times):.3f} overlapping_trials={overlaps[indexed]}/{SAMPLES}")
+    if any(count == 0 for count in overlaps.values()):
+        raise RuntimeError("The experiment did not observe overlapping writers in both variants")
+
+
+def main():
+    cli = argparse.ArgumentParser(description=__doc__)
+    cli.add_argument("--durable", action="store_true", help="measure commits and page changes between reads")
+    args = cli.parse_args()
+    if os.environ.get("CF_ALLOW_DISPOSABLE_LOAD") != "1":
+        sys.exit("Start a disposable Compose stack and set CF_ALLOW_DISPOSABLE_LOAD=1.")
+    if args.durable:
+        measure_durable()
+    else:
+        measure_temporary()
 
 
 if __name__ == "__main__":

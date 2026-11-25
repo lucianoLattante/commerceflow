@@ -118,4 +118,5 @@ load tests, production proxy/broker/Redis hardening and deployment explicitly de
 - Compare the current failed-delivery offset and count queries with a candidate index and an exclusive timestamp/ID cursor on 50,000 synthetic dispatches.
 - Check equal pages across tied timestamps and record the plans in the disposable Compose verification job. [Reproduce the experiment](docs/CONTENTION.md#operator-delivery-pagination).
 - Use the complementary [filter and write experiment](docs/CONTENTION.md#other-filters-and-write-cost) to evaluate the candidate index with the unfiltered, kind-only and combined state/kind queries and the cost of changing state on synthetic rows.
-- Evaluate cursor behavior during concurrent updates, writer contention on durable tables and API compatibility before selecting a production change.
+- Reproduce changes between page requests and measure concurrent commits on persistent InnoDB fixtures with and without the candidate index. [Verification procedure](docs/CONTENTION.md#pages-between-commits-and-concurrent-writes).
+- Keep existing pagination semantics for callers. An opt-in cursor requires a decision about totals, filter changes between requests and whether the measured tradeoff justifies a persistent index.

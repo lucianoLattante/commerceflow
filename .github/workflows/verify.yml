@@ -93,6 +93,8 @@ jobs:
           grep -Fx 'offset_matches_cursor=1' "$RUNNER_TEMP/delivery-pagination.txt"
       - name: Measure additional delivery filters and index write cost
         run: python3 scripts/measure-delivery-index-tradeoffs.py
+      - name: Verify pages between commits and measure concurrent updates
+        run: python3 scripts/measure-delivery-index-tradeoffs.py --durable
       - name: Container diagnostics on failure
         if: failure()
         run: docker compose logs --no-color
